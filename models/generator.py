@@ -20,7 +20,7 @@ class VideoGenerator(t.nn.Module):
 
         self.n_downsampling = opt.n_downsampling
         self.downsampler = get_downsample_layer()
-        self.upsampler = nn.Upsample(scale_factor=2,)
+        self.upsampler = nn.Upsample(scale_factor=2, align_corners=False)
         self.encoder_state = []
         self.decoder_state = []
 
@@ -101,6 +101,7 @@ class VideoGenerator(t.nn.Module):
             if i == scale + 1 and w != 1:
                 to_rgb = getattr(self, 'rgb_to_scale_' + str(i))
                 next_decoder = getattr(self, 'decoder_to_scale_' + str(i - 1))
+                x = decoder(x)
                 y = next_decoder[0](to_rgb(x))
             elif i == scale:
                 to_rgb = getattr(self, 'rgb_to_scale_' + str(i))

@@ -22,7 +22,7 @@ def get_norm_layer(norm_type='instance'):
     return norm_layer
 
 def get_upsample_layer(upsample_type='bicubic'):
-    return nn.Upsample(scale_factor=2, mode=upsample_type)
+    return nn.Upsample(scale_factor=2, mode=upsample_type, align_corners=False)
 
 def get_downsample_layer():
     return nn.AvgPool2d(kernel_size=3, stride=2, padding=[1,1], count_include_pad=False)
