@@ -7,7 +7,7 @@ from .model_helper import weights_init
 
 import os
 import fractions
-def lcm(a,b): return abs(a*b) / fractions.gcd(a,b) if a and b else 0
+def lcm(a,b): return (abs(a*b) / fractions.gcd(a,b)) if a and b else 0
 
 def wrap_model(opt, modelG, modelD):
     if opt.n_gpus_gen == len(opt.gpu_ids):
@@ -174,7 +174,7 @@ def save_models(opt, epoch, epoch_iter, total_steps, visualizer, iter_path, mode
         if total_steps % opt.save_latest_freq == 0:
             modelG.module.save('latest')
             modelD.module.save('latest')
-            np.savetxt(iter_path, (epoch, epoch_iter), delimiter=',', fmt='$d')
+            np.savetxt(iter_path, (epoch, epoch_iter), delimiter=',', fmt='%d')
         else:
             if epoch % opt.save_epoch_freq == 0:
                 modelG.module.save('latest')

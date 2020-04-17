@@ -71,9 +71,10 @@ def get_video_params(opt, n_frames_total, cur_seq_len, index):
             n_gpus = opt.n_gpus_gen if opt.batch_size == 1 else 1
             n_frames_per_load = opt.max_frames_per_gpu * n_gpus
             n_frames_per_load = min(n_frames_total, n_frames_per_load)
+            assert n_frames_per_load >= opt.n_frames_D
             n_loadings = n_frames_total // n_frames_per_load
             n_frames_total = n_frames_per_load * n_loadings + tG - 1
-            max_t_step = min(opt.max_t_step , (cur_seq_len - 1) // (n_frames_total - 1))
+            max_t_step = min(opt.max_t_step , ((cur_seq_len - 1) // (n_frames_total - 1)) if n_frames_total - 1 != 0 else 1)
             t_step = np.random.randint(max_t_step) + 1
             offset_max = max(1, cur_seq_len - (n_frames_total - 1) * t_step)
             if opt.dataset_mode == 'pose':

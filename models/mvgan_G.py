@@ -79,7 +79,6 @@ class mvganG(BaseModel):
     def generate_frame_train(self, netG, real_A, real_B, start_gpu):
         tG = self.opt.n_frames_G
         n_frames_per_load = self.n_frames_per_load
-        fake_Bs = None
         dest_id = self.gpu_ids[0] if self.split_gpus else start_gpu
         _, _, bc, bh, bw = real_B.size()
         fake_Bs = None

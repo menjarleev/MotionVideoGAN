@@ -18,7 +18,7 @@ class mvganD(BaseModel):
         self.netD_img = define_D(opt, 'image')
         self.net_type = opt.net_type
         self.scale = opt.scale
-        self.old_w = 1
+        self.old_w = 1.0
         if opt.net_type == 'video':
             self.netD_vid = define_D(opt, 'video')
         elif opt.net_type =='image':
@@ -64,7 +64,7 @@ class mvganD(BaseModel):
         if tensor_list[0].get_device() == self.gpu_ids[0]:
             tensor_list = util.remove_dummy_from_tensor(tensor_list, dummy_bs)
             if tensor_list[0].size(0) == 0:
-                return [self.Tensor(1, 1).fill_(0) * (len(self.loss_name_T) if type=='video' else len(self.loss_name))]
+                return [self.Tensor(1, 1).fill_(0.0) * (len(self.loss_name_T) if type=='video' else len(self.loss_name))]
         if type == 'video':
             if self.net_type == 'video':
                 loss_D_T_real, loss_D_T_fake, loss_G_T_GAN, loss_G_T_Feat = self.compute_loss_D_T(self.netD_vid, real_B, fake_B, real_A)
@@ -72,14 +72,14 @@ class mvganD(BaseModel):
                 loss_list = [loss.view(-1, 1) for loss in loss_list]
                 return loss_list
             else:
-                return [self.Tensor(1, 1).fill_(0) * len(self.loss_names_T)]
+                return [self.Tensor(1, 1).fill_(0.0) * len(self.loss_names_T)]
 
 
         _, _, self.height, self.width = real_B.size()
         loss_D_real, loss_D_fake, loss_G_GAN, loss_G_GAN_Feat = self.compute_loss_D(self.netD_img, real_A, real_B, fake_B)
-        loss_G_VGG = (self.criterionVGG(fake_B, real_B) * lambda_vgg) if not self.opt.no_vgg else self.Tensor(1,1).fill_(0)
-        loss_G_Struct = (self.criterionStruct(fake_B, real_B) * lambda_struct) if not self.opt.no_struct else self.Tensor(1,1).fill_(0)
-        loss_G_Texture = (self.criterionTexture(fake_B, real_B, real_A) * lambda_texture) if not self.opt.no_texture else self.Tensor(1,1).fill_(0)
+        loss_G_VGG = (self.criterionVGG(fake_B, real_B) * lambda_vgg) if not self.opt.no_vgg else self.Tensor(1,1).fill_(0.0)
+        loss_G_Struct = (self.criterionStruct(fake_B, real_B) * lambda_struct) if not self.opt.no_struct else self.Tensor(1,1).fill_(0.0)
+        loss_G_Texture = (self.criterionTexture(fake_B, real_B, real_A) * lambda_texture) if not self.opt.no_texture else self.Tensor(1,1).fill_(0.0)
         loss_list = [loss_G_VGG, loss_G_GAN, loss_G_GAN_Feat, loss_G_Struct, loss_G_Texture, loss_D_real, loss_D_fake]
         loss_list = [loss.view(-1, 1) for loss in loss_list]
         return loss_list
@@ -95,9 +95,9 @@ class mvganD(BaseModel):
     def get_losses(self, loss_dict, loss_dict_T):
         loss_D = (loss_dict['D_fake'] + loss_dict['D_real']) * 0.5
         loss_G = loss_dict['G_GAN'] + loss_dict['G_GAN_Feat'] + loss_dict['G_VGG'] \
-                 + loss_dict['G_Struct'] + loss_dict['G_Texture']
+                 + loss_dict['G_Struct'] + loss_dict['G_Texture'] + loss_dict_T['G_T_GAN'] \
+                 + loss_dict_T['G_T_GAN_Feat']
         loss_D_T = (loss_dict_T['D_T_real'] + loss_dict_T['D_T_fake']) * 0.5
-        loss_G += loss_dict_T['G_T_GAN'] + loss_dict_T['G_T_GAN_Feat']
         return loss_G, loss_D, loss_D_T
 
     def GAN_and_FM_loss(self, pred_real, pred_fake):

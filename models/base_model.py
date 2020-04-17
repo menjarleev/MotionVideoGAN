@@ -9,7 +9,7 @@ class BaseModel(t.nn.Module):
         self.opt = opt
         self.isTrain = opt.isTrain
         self.gpu_ids = opt.gpu_ids
-        self.Tensor = t.cuda.FloatTensor if self.gpu_ids else t.Tensor
+        self.Tensor = t.cuda.FloatTensor if self.gpu_ids else t.FloatTensor
         self.save_dir = os.path.join(opt.checkpoints_dir, opt.name)
 
     def set_input(self, input):

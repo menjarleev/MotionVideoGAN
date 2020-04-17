@@ -84,7 +84,7 @@ class VGGLoss(nn.Module):
         while x.size()[3] > 1024:
             x, y = self.downsample(x), self.downsample(y)
         x_vgg, y_vgg = self.vgg(x), self.vgg(y)
-        loss = 0
+        loss = 0.0
         for i in range(len(x_vgg)):
             loss += self.weights[i] * self.criterion(x_vgg[i], y_vgg[i].detach())
         return loss

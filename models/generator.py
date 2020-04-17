@@ -49,14 +49,14 @@ class VideoGenerator(t.nn.Module):
         for i in range(self.n_downsampling, 0, -1):
             if i == 1:
                 to_rgb = [Conv(pref, output_dim, kernel_size=1, stride=1, padding=padding), nn.Tanh()]
-                decoder = [nn.Upsample(scale_factor=2, mode=opt.upsample_type), CBAM(ngf_list[i], ngf_list[i-1], kernel_size=3, stride=1, padding=padding), norm_layer(ngf_list[i-1]), nn.ReLU(True),
+                decoder = [nn.Upsample(scale_factor=2, mode=opt.upsample_type, align_corners=False), CBAM(ngf_list[i], ngf_list[i-1], kernel_size=3, stride=1, padding=padding), norm_layer(ngf_list[i-1]), nn.ReLU(True),
                            CBAM(ngf_list[i-1], pref, kernel_size=3, stride=1, padding=padding), norm_layer(pref), nn.ReLU(True),
                            ConvLSTMBAM(pref, image_size)]
                 setattr(self, 'rgb_to_scale_' + str(i - 1), nn.Sequential(*to_rgb))
                 setattr(self, 'decoder_to_scale_' + str(i - 1), nn.ModuleList(decoder))
             else:
                 to_rgb = [Conv(ngf_list[i-1], output_dim, kernel_size=1, stride=1, padding=padding), nn.Tanh()]
-                decoder = [nn.Upsample(scale_factor=2, mode=opt.upsample_type), CBAM(ngf_list[i], ngf_list[i - 1], kernel_size=3, stride=1, padding=padding), norm_layer(ngf_list[i - 1]), nn.ReLU(True)]
+                decoder = [nn.Upsample(scale_factor=2, mode=opt.upsample_type, align_corners=False), CBAM(ngf_list[i], ngf_list[i - 1], kernel_size=3, stride=1, padding=padding), norm_layer(ngf_list[i - 1]), nn.ReLU(True)]
                 setattr(self, 'rgb_to_scale_' + str(i - 1), nn.Sequential(*to_rgb))
                 setattr(self, 'decoder_to_scale_' + str(i - 1), nn.Sequential(*decoder))
 
