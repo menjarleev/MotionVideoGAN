@@ -89,7 +89,9 @@ class VGGLoss(nn.Module):
             loss += self.weights[i] * self.criterion(x_vgg[i], y_vgg[i].detach())
         return loss
 
+
 class StructLoss(nn.Module):
+    # TODO implement struct loss with pretrained openpose model
     def __init__(self):
         super(StructLoss, self).__init__()
 

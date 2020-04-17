@@ -1,4 +1,13 @@
 .idea/
 **/checkpoints/
 
+**/notebooks/
+**/.gitkeep
+**/images/
+**/README.md
+demo.py
+demo_camera.py
+**/pytorch-openpose/model/
+**/pytorch-openpose/requirements.txt
 
+.DS_Store

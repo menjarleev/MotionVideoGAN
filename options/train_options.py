@@ -16,7 +16,7 @@ class TrainOptions(BaseOptions):
         self.parser.add_argument('--lr', type=float, default=0.0002, help='initial learning rate for adam')
         self.parser.add_argument('--niter', type=int, default=10, help='# of iter at starting learning rate')
         self.parser.add_argument('--niter_decay', type=int, default=10, help='# of iter to linearly decay learning rate to zero')
-        self.parser.add_argument('--which_epoch', type=str, default='lastest', help='which epoch to load? set to latest to use latest cached model')
+        self.parser.add_argument('--which_epoch', type=str, default='latest', help='which epoch to load? set to latest to use latest cached model')
         self.parser.add_argument('--beta1', type=float, default=0.5, help='momentum term of adam')
         self.parser.add_argument('--beta2', type=float, default=0.999, help='momentum term2 of adam')
         self.parser.add_argument('--step_decay_ratio', type=float, default=0.5, help='ratio to progressively increase generator weight from 0 to 1 in regards of an epoch')

@@ -10,6 +10,7 @@ import fractions
 def lcm(a,b): return (abs(a*b) / fractions.gcd(a,b)) if a and b else 0
 
 def wrap_model(opt, modelG, modelD):
+    # TODO wrap generator in a GPU and discriminator, other pretrained model in the other GPU to avoid CUDA out of memory
     if opt.n_gpus_gen == len(opt.gpu_ids):
         modelG = myModel(opt, modelG)
         modelD = myModel(opt, modelD)
