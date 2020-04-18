@@ -19,6 +19,8 @@ class mvganD(BaseModel):
         self.net_type = opt.net_type
         self.scale = opt.scale
         self.old_w = 1.0
+        self.split_gpus = (self.opt.n_gpus_gen < len(self.opt.gpu_ids)) and (self.opt.batch_size == 1)
+        self.gpus_dis = self.opt.gpu_ids[self.opt.n_gpus_gen + 1:] if self.split_gpus else self.gpu_ids
         if opt.net_type == 'video':
             self.netD_vid = define_D(opt, 'video')
         elif opt.net_type =='image':
@@ -47,7 +49,7 @@ class mvganD(BaseModel):
         self.criterionFeat = torch.nn.L1Loss()
 
         if not opt.no_vgg:
-            self.criterionVGG = VGGLoss(self.gpu_ids[0])
+            self.criterionVGG = VGGLoss(self.gpus_dis[0])
 
         self.loss_names = ['G_VGG', 'G_GAN', 'G_GAN_Feat', 'G_Struct', 'G_Texture',
                            'D_real', 'D_fake']
@@ -61,7 +63,7 @@ class mvganD(BaseModel):
         lambda_struct = self.opt.lambda_struct
         lambda_texture = self.opt.lambda_texture
         real_A, real_B, fake_B = tensor_list
-        if tensor_list[0].get_device() == self.gpu_ids[0]:
+        if tensor_list[0].get_device() == self.gpus_dis[0]:
             tensor_list = util.remove_dummy_from_tensor(tensor_list, dummy_bs)
             if tensor_list[0].size(0) == 0:
                 return [self.Tensor(1, 1).fill_(0.0) * (len(self.loss_name_T) if type=='video' else len(self.loss_name))]
@@ -86,10 +88,10 @@ class mvganD(BaseModel):
 
 
     def save(self, label):
-        self.save_network(self.netD_img, 'D', label, self.gpu_ids)
+        self.save_network(self.netD_img, 'D', label, self.gpus_dis)
         self.save_optimizer(self.optimizer_D, 'D', label)
         if self.net_type == 'video':
-            self.save_network(self.netD_vid, 'D_T', label, self.gpu_ids)
+            self.save_network(self.netD_vid, 'D_T', label, self.gpus_dis)
             self.save_optimizer(self.optimizer_D_T, 'D_T', label)
 
     def get_losses(self, loss_dict, loss_dict_T):

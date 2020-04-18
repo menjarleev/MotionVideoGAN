@@ -97,9 +97,9 @@ class RCLSTMBAM(t.nn.Module):
         out = original_input + x
         return out, c_next, h_next
 
-    def init_hidden(self, batch_size):
-        return (t.zeros(batch_size, self.n_channel, self.feature_size, self.feature_size),
-                t.zeros(batch_size, self.n_channel, self.feature_size, self.feature_size))
+    def init_hidden(self, batch_size=1, gpu_id=0):
+        return (t.zeros(batch_size, self.n_channel, self.feature_size, self.feature_size).cuda(gpu_id),
+                t.zeros(batch_size, self.n_channel, self.feature_size, self.feature_size).cuda(gpu_id))
 
 class ConvLSTMBAM(t.nn.Module):
     def __init__(self, n_channel, input_size, kernel_size=3, stride=1, padding='reflect'):
@@ -125,6 +125,6 @@ class ConvLSTMBAM(t.nn.Module):
         out = original_input + x
         return out, c_next, h_next
 
-    def init_hidden(self, batch_size):
-        return (t.zeros(batch_size, self.n_channel, self.feature_size[0], self.feature_size[1]),
-                t.zeros(batch_size, self.n_channel, self.feature_size[0], self.feature_size[1]))
+    def init_hidden(self, batch_size=1, gpu_id=0):
+        return (t.zeros(batch_size, self.n_channel, self.feature_size[0], self.feature_size[1]).cuda(gpu_id),
+                t.zeros(batch_size, self.n_channel, self.feature_size[0], self.feature_size[1]).cuda(gpu_id))

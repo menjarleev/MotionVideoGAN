@@ -21,6 +21,9 @@ class mvganG(BaseModel):
         self.net_type = self.opt.net_type
         self.scale = opt.scale
         self.split_gpus = (self.opt.n_gpus_gen < len(self.opt.gpu_ids)) and (self.opt.batch_size == 1)
+        self.gpus_gen = self.opt.gpu_ids[:self.opt.n_gpus_gen]
+        self.gpus_out = self.opt.gpu_ids[self.opt.n_gpus_gen + 1:] if self.split_gpus else self.gpus_gen
+
 
 
         print('---------- Networks initialized -------------')
@@ -52,7 +55,15 @@ class mvganG(BaseModel):
                                                                                           self.n_gpus, self.n_frames_per_gpu))
     def init_states(self, batch_size):
         if self.net_type == 'video':
-            self.states = [self.netG.init_state(batch_size)] * self.n_gpus
+            self.states = []
+            for i in range(len(self.gpus_gen)):
+                self.states += [self.netG.init_state(batch_size, self.gpus_gen[i])]
+
+    def detach_states(self):
+        if self.net_type == 'video':
+            for i in range(len(self.states)):
+                self.states[i] = [[s.detach() for s in state] for state in self.states[i]]
+
 
     def encode_input(self, input_map, real_image):
         size = input_map.size()
@@ -62,16 +73,16 @@ class mvganG(BaseModel):
         return input_map, real_image
 
     def forward(self, input_A, input_B, dummy_bs=0):
-        tG = self.opt.n_frames_G
-        gpu_split_id = self.opt.n_gpus_gen + 1
-        netG = []
-        netG.append(torch.nn.parallel.replicate(self.netG, devices=self.opt.gpu_ids[:gpu_split_id]) if self.split_gpus else [self.netG])
         real_A, real_B= self.encode_input(input_A, input_B)
-        if real_A.get_device() == self.gpu_ids[0]:
+        if real_A.get_device() == self.gpus_gen[0]:
             real_A, real_B= util.remove_dummy_from_tensor([real_A, real_B], dummy_bs)
             if input_A.size(0) == 0:
                 return self.return_dummy(input_A)
-        start_gpu = self.gpu_ids[1] if self.split_gpus else real_A.get_device()
+        netG = torch.nn.parallel.replicate(self.netG, devices=self.gpus_gen)
+        for i in range(len(self.gpus_gen)):
+            netG[i].encoder_state = self.states[i][0]
+            netG[i].decoder_state = self.states[i][1]
+        start_gpu = self.gpus_gen[0]
         fake_B = self.generate_frame_train(netG, real_A, real_B, start_gpu)
 
         return real_A, real_B, fake_B
@@ -79,25 +90,18 @@ class mvganG(BaseModel):
     def generate_frame_train(self, netG, real_A, real_B, start_gpu):
         tG = self.opt.n_frames_G
         n_frames_per_load = self.n_frames_per_load
-        dest_id = self.gpu_ids[0] if self.split_gpus else start_gpu
+        dest_id = self.gpus_out[0] if self.split_gpus else start_gpu
         _, _, bc, bh, bw = real_B.size()
         fake_Bs = None
         for t in range(n_frames_per_load):
             gpu_id = (t // self.n_frames_per_gpu + start_gpu) if self.split_gpus else start_gpu # the GPU idx where we generate this frame
-            net_id = gpu_id if self.split_gpus else 0                                           # the GPU idx where the net is located
+            net_id = t // self.n_frames_per_gpu if self.split_gpus else 0                                           # the GPU idx where the net is located
             _, _, _, h, w = real_A.size()
             input_Ai = real_A[:, t:t+tG, ...].view(self.bs, -1, h, w).cuda(gpu_id)
-            if self.scale == 0:
-                netG[0][net_id].encoder_state = [s.cuda(gpu_id) for s in self.states[t // self.n_frames_per_gpu][0]]
-                netG[0][net_id].decoder_state = [s.cuda(gpu_id) for s in self.states[t // self.n_frames_per_gpu][1]]
-            fake_B = netG[0][net_id](input_Ai, self.scale, self.old_w).unsqueeze(1)
-            if self.scale == 0:
-                if (t + 1) % self.n_frames_bp == 0 and self.scale == 0:
-                    netG[0][net_id].detach_state()
-                self.states[t // self.n_frames_per_gpu][0] = netG[0][net_id].encoder_state
-                self.states[t // self.n_frames_per_gpu][1] = netG[0][net_id].decoder_state
+            fake_B = netG[net_id](input_Ai, self.scale, self.old_w).unsqueeze(1)
+            # if self.scale == 0 and (t + 1) % self.n_frames_bp == 0:
+            #         netG[0][net_id].detach_state()
             fake_Bs = fake_B if fake_Bs is None else torch.cat([fake_Bs, fake_B.cuda(dest_id)], dim=1)
-
         return fake_Bs
 
 
@@ -118,7 +122,7 @@ class mvganG(BaseModel):
         return [t.view(self.bs, -1, self.input_dim, self.height, self.width) for t in tensor_list]
 
     def save(self, label):
-        self.save_network(self.netG, 'G', label, self.gpu_ids)
+        self.save_network(self.netG, 'G', label, self.gpus_gen)
         self.save_optimizer(self.optimizer_G, 'G', label)
 
 

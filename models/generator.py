@@ -60,9 +60,9 @@ class VideoGenerator(t.nn.Module):
                 setattr(self, 'rgb_to_scale_' + str(i - 1), nn.Sequential(*to_rgb))
                 setattr(self, 'decoder_to_scale_' + str(i - 1), nn.Sequential(*decoder))
 
-    def init_state(self, batch_size):
-        self.encoder_state = getattr(self,'encoder_from_scale_0')[0].init_hidden(batch_size=batch_size)
-        self.decoder_state = getattr(self,'decoder_to_scale_0')[-1].init_hidden(batch_size=batch_size)
+    def init_state(self, batch_size, gpu_id):
+        self.encoder_state = getattr(self,'encoder_from_scale_0')[0].init_hidden(batch_size=batch_size, gpu_id=gpu_id)
+        self.decoder_state = getattr(self,'decoder_to_scale_0')[-1].init_hidden(batch_size=batch_size, gpu_id=gpu_id)
         return [self.encoder_state, self.decoder_state]
 
     def detach_state(self):

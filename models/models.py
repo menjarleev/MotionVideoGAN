@@ -144,9 +144,6 @@ def init_params(opt, modelG, modelD, data_loader):
         if start_epoch > opt.niter:
             modelG.module.update_learning_rate(start_epoch-1, 'G')
             modelD.module.update_learning_rate(start_epoch-1, 'D')
-        if epoch_iter < opt.step_decay_ratio * step_per_epoch:
-            modelG.module.update_weight(epoch_iter, step_per_epoch)
-            modelD.module.update_weight(epoch_iter, step_per_epoch)
         if modelG.module.scale != opt.scale:
             modelG.module.update_scale(opt.scale)
             modelD.module.update_scale(opt.scale)
@@ -158,6 +155,7 @@ def init_params(opt, modelG, modelD, data_loader):
     print_freq = lcm(opt.print_freq, opt.batch_size)
     total_steps = (start_epoch - 1) * len(data_loader) + epoch_iter
     total_steps = total_steps // print_freq * print_freq
+    update_model_weights(total_steps, len(data_loader), modelG, modelD)
     return n_gpus, tG, tD, start_epoch, epoch_iter, print_freq, total_steps, iter_path, input_dim, output_dim
 
 def update_models(opt, epoch, modelG, modelD, data_loader):
@@ -165,9 +163,11 @@ def update_models(opt, epoch, modelG, modelD, data_loader):
         modelG.module.update_learning_rate(epoch, 'G')
         modelD.module.update_learning_rate(epoch, 'D')
 
-def update_model_weights(opt, epoch_iter, step_length, modelG, modelD):
-    modelG.module.update_weight(opt.step_decay_ratio, epoch_iter, step_length)
-    modelD.module.update_weight(opt.step_decay_ratio, epoch_iter, step_length)
+def update_model_weights(total_step, step_length, modelG, modelD):
+    old, new = modelG.module.update_weight(total_step, step_length)
+    _, _ = modelD.module.update_weight(total_step, step_length)
+    if old != new:
+        print('update upscale model weight from %.4f to %.4f' %(old, new))
 
 
 def save_models(opt, epoch, epoch_iter, total_steps, visualizer, iter_path, modelG, modelD, end_of_epoch=False):
@@ -187,3 +187,7 @@ def save_models(opt, epoch, epoch_iter, total_steps, visualizer, iter_path, mode
 def init_model_states(opt, model):
     if opt.net_type == 'video' and opt.scale == 0:
         model.module.init_states(opt.batch_size)
+
+def detach_model_states(opt, model):
+    if opt.net_type == 'video' and opt.scale == 0:
+        model.module.detach_states()

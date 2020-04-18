@@ -99,17 +99,19 @@ class BaseModel(t.nn.Module):
         print('update learning rate: %f -> %f' % (self.old_lr, lr))
         self.old_lr = lr
 
-    def update_weight(self, step_decay_ratio, epoch_iter, step_length):
-        if self.scale == 0 or self.scale == self.opt.n_downsampling - 1:
+    def update_weight(self, total_steps, step_length):
+        if not self.isTrain or self.scale == self.opt.n_downsampling - 1:
             self.old_w = 1
-            return
-        elif epoch_iter <= step_decay_ratio * step_length:
-            w = epoch_iter / (step_decay_ratio * step_length)
+            return self.old_w, self.old_w
+        elif total_steps <= self.opt.niter_weight_update * step_length:
+            w = total_steps / (self.opt.niter_weight_update * step_length)
+            old_w = self.old_w
+            new_w = w
+            self.old_w = w
+            return old_w, new_w
         else:
             self.old_w = 1
-            return
-        print('update model weight: %f -> %f' % (self.old_w, w))
-        self.old_w = w
+            return self.old_w, self.old_w
 
     def update_scale(self, scale):
         print('update scale: %f -> %f' % (self.scale, scale))

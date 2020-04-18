@@ -1,7 +1,7 @@
 import os
 import torch
 from options.train_options import TrainOptions
-from models.models import create_model, create_optimizer, init_params, save_models, update_models, init_model_states, update_model_weights
+from models.models import create_model, create_optimizer, init_params, save_models, update_models, init_model_states, update_model_weights, detach_model_states
 from data.data_loader import CreateDataLoader
 from subprocess import call
 from util.visualizer import Visualizer
@@ -37,10 +37,9 @@ def train():
 
             save_fake = total_steps % opt.display_freq == 0
             n_frames_total, n_frames_load, t_len = data_loader.dataset.init_data_params(data, n_gpus, tG)
-
+            init_model_states(opt, modelG)
             for i in range(0, n_frames_total, n_frames_load):
                 input_A, input_B = data_loader.dataset.prepare_data(data, i, input_dim, output_dim)
-                init_model_states(opt, modelG)
                 real_A, real_B, fake_B = modelG(input_A, input_B)
                 losses = modelD(reshape([real_A, real_B, fake_B]), 'image')
                 losses = [torch.mean(x) for x in losses]
@@ -50,8 +49,11 @@ def train():
                 loss_dict_T = dict(zip(modelD.module.loss_names_T, losses_T))
                 loss_G, loss_D, loss_D_T = modelD.module.get_losses(loss_dict, loss_dict_T)
                 backward(opt, loss_G, loss_D, loss_D_T, optimizer_G, optimizer_D, optimizer_D_T)
+                detach_model_states(opt, modelG)
 
-            update_model_weights(opt, epoch_iter, dataset_size, modelG, modelD)
+
+
+            update_model_weights(opt, total_steps, dataset_size, modelG, modelD)
             if opt.debug:
                 call(["nvidia-smi", "--format=csv", "--query-gpu=memory.used,memory.free"])
             #################### Display results and erros ####################
