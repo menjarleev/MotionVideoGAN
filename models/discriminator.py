@@ -18,7 +18,7 @@ class ImageDiscriminator(nn.Module):
         self.resize = get_downsample_layer()
         for i in range(self.n_downsampling):
             if i == 0:
-                from_rgb = [Conv(input_dim, pref, kernel_size=7, stride=1, padding=padding), norm_layer(pref), nn.LeakyReLU(negative_slope,True)]
+                from_rgb = [Conv(input_dim, pref, kernel_size=7), norm_layer(pref), nn.LeakyReLU(negative_slope,True)]
                 downsample = [Conv(pref, ndf_list[i], kernel_size=3, stride=2, padding=padding), norm_layer(ndf_list[i]), nn.LeakyReLU(negative_slope,True)]
                 setattr(self, 'rgb_from_scale_' + str(i), nn.Sequential(*from_rgb))
                 setattr(self, 'downsampler_from_scale_' + str(i), nn.Sequential(*downsample))

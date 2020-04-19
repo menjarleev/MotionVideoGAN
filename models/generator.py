@@ -34,7 +34,7 @@ class VideoGenerator(t.nn.Module):
             else:
                 ngf_list += [min(ngf_list[-1] * 2, 512)]
                 from_rgb = [Conv(input_dim, ngf_list[-2], kernel_size=7, stride=1, padding=padding), norm_layer(ngf_list[-2]), nn.ReLU(True)]
-                encoder = [CBAM(ngf_list[-2], ngf_list[-1], kernel_size=3, stride=2, padding=padding), norm_layer(ngf_list[-1]), nn.ReLU(True)]
+                encoder = [Conv(ngf_list[-2], ngf_list[-1], kernel_size=3, stride=2, padding=padding), norm_layer(ngf_list[-1]), nn.ReLU(True)]
                 setattr(self, 'rgb_from_scale_' + str(i), nn.Sequential(*from_rgb))
                 setattr(self, 'encoder_from_scale_' + str(i), nn.Sequential(*encoder))
 
@@ -42,21 +42,26 @@ class VideoGenerator(t.nn.Module):
         ngf_list += [ngf_list[-1]]
         res_blocks = []
         for i in range(n_block):
-            res_blocks += [RCBAM(ngf_list[-1], ngf_list[-1]), norm_layer(ngf_list[-1]), nn.ReLU(True)]
+            # res_blocks += [ResnetBlock(ngf_list[-1], norm_layer)]
+            res_blocks += [RCBAM(ngf_list[-1], ngf_list[-1], norm_layer)]
         self.res_blocks = nn.Sequential(*res_blocks)
 
         # set up decoder
         for i in range(self.n_downsampling, 0, -1):
             if i == 1:
                 to_rgb = [Conv(pref, output_dim, kernel_size=1, stride=1, padding=padding), nn.Tanh()]
-                decoder = [nn.Upsample(scale_factor=2, mode=opt.upsample_type, align_corners=False), CBAM(ngf_list[i], ngf_list[i-1], kernel_size=3, stride=1, padding=padding), norm_layer(ngf_list[i-1]), nn.ReLU(True),
-                           CBAM(ngf_list[i-1], pref, kernel_size=3, stride=1, padding=padding), norm_layer(pref), nn.ReLU(True),
+                decoder = [nn.Upsample(scale_factor=2, mode=opt.upsample_type, align_corners=False), Conv(ngf_list[i], ngf_list[i-1], kernel_size=3, stride=1, padding=padding), norm_layer(ngf_list[i-1]), nn.ReLU(True),
+                           Conv(ngf_list[i-1], pref, kernel_size=3, stride=1, padding=padding), norm_layer(pref), nn.ReLU(True),
                            ConvLSTMBAM(pref, image_size)]
+                # decoder = [nn.ConvTranspose2d(ngf_list[i], ngf_list[i-1], kernel_size=3, stride=2, padding=1, output_padding=1), norm_layer(ngf_list[i-1]), nn.ReLU(True),
+                #            Conv(ngf_list[i-1], pref, kernel_size=3, stride=1, padding=padding), norm_layer(pref), nn.ReLU(True),
+                #            ConvLSTMBAM(pref, image_size)]
                 setattr(self, 'rgb_to_scale_' + str(i - 1), nn.Sequential(*to_rgb))
                 setattr(self, 'decoder_to_scale_' + str(i - 1), nn.ModuleList(decoder))
             else:
                 to_rgb = [Conv(ngf_list[i-1], output_dim, kernel_size=1, stride=1, padding=padding), nn.Tanh()]
-                decoder = [nn.Upsample(scale_factor=2, mode=opt.upsample_type, align_corners=False), CBAM(ngf_list[i], ngf_list[i - 1], kernel_size=3, stride=1, padding=padding), norm_layer(ngf_list[i - 1]), nn.ReLU(True)]
+                decoder = [nn.Upsample(scale_factor=2, mode=opt.upsample_type, align_corners=False), Conv(ngf_list[i], ngf_list[i - 1], kernel_size=3, stride=1, padding=padding), norm_layer(ngf_list[i - 1]), nn.ReLU(True)]
+                # decoder = [nn.ConvTranspose2d(ngf_list[i], ngf_list[i - 1], kernel_size=3, stride=2, padding=1, output_padding=1), norm_layer(ngf_list[i - 1]), nn.ReLU(True)]
                 setattr(self, 'rgb_to_scale_' + str(i - 1), nn.Sequential(*to_rgb))
                 setattr(self, 'decoder_to_scale_' + str(i - 1), nn.Sequential(*decoder))
 
@@ -152,7 +157,7 @@ class ImageGenerator(t.nn.Module):
                 ngf_list += [min(ngf_list[-1] * 2, 512)]
                 from_rgb = [Conv(input_dim, ngf_list[-2], kernel_size=7, stride=1, padding=padding),
                             norm_layer(ngf_list[-2]), nn.ReLU(True)]
-                encoder = [CBAM(ngf_list[-2], ngf_list[-1], kernel_size=3, stride=2, padding=padding),
+                encoder = [Conv(ngf_list[-2], ngf_list[-1], kernel_size=3, stride=2, padding=padding),
                            norm_layer(ngf_list[-1]), nn.ReLU(True)]
                 setattr(self, 'rgb_from_scale_' + str(i), nn.Sequential(*from_rgb))
                 setattr(self, 'encoder_from_scale_' + str(i), nn.Sequential(*encoder))
@@ -161,20 +166,20 @@ class ImageGenerator(t.nn.Module):
         ngf_list += [ngf_list[-1]]
         res_blocks = []
         for i in range(n_block):
-            res_blocks += [RCBAM(ngf_list[-1], ngf_list[-1]), norm_layer(ngf_list[-1]), nn.ReLU(True)]
+            res_blocks += [ResnetBlock(ngf_list[-1], norm_layer)]
         self.res_blocks = nn.Sequential(*res_blocks)
 
         # set up decoder
         for i in range(self.n_downsampling, 0, -1):
             if i == 1:
                 to_rgb = [Conv(pref, output_dim, kernel_size=1, stride=1, padding=padding), nn.Tanh()]
-                decoder = [upsampler(), CBAM(ngf_list[i], ngf_list[i - 1], kernel_size=3, stride=1, padding=padding),
+                decoder = [upsampler(), Conv(ngf_list[i], ngf_list[i - 1], kernel_size=3, stride=1, padding=padding),
                            norm_layer(ngf_list[i - 1]), nn.ReLU(True)]
                 setattr(self, 'rgb_to_scale_' + str(i - 1), nn.Sequential(*to_rgb))
                 setattr(self, 'decoder_to_scale_' + str(i - 1), nn.Sequential(*decoder))
             else:
                 to_rgb = [Conv(ngf_list[i - 1], output_dim, kernel_size=1, stride=1, padding=padding), nn.Tanh()]
-                decoder = [upsampler(), CBAM(ngf_list[i], ngf_list[i - 1], kernel_size=3, stride=1, padding=padding),
+                decoder = [upsampler(), Conv(ngf_list[i], ngf_list[i - 1], kernel_size=3, stride=1, padding=padding),
                            norm_layer(ngf_list[i - 1]), nn.ReLU(True)]
                 setattr(self, 'rgb_to_scale_' + str(i - 1), nn.Sequential(*to_rgb))
                 setattr(self, 'decoder_to_scale_' + str(i - 1), nn.Sequential(*decoder))

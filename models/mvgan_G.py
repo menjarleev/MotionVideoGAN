@@ -79,9 +79,10 @@ class mvganG(BaseModel):
             if input_A.size(0) == 0:
                 return self.return_dummy(input_A)
         netG = torch.nn.parallel.replicate(self.netG, devices=self.gpus_gen)
-        for i in range(len(self.gpus_gen)):
-            netG[i].encoder_state = self.states[i][0]
-            netG[i].decoder_state = self.states[i][1]
+        if self.scale == 0:
+            for i in range(len(self.gpus_gen)):
+                netG[i].encoder_state = self.states[i][0]
+                netG[i].decoder_state = self.states[i][1]
         start_gpu = self.gpus_gen[0]
         fake_B = self.generate_frame_train(netG, real_A, real_B, start_gpu)
 

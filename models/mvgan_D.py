@@ -30,9 +30,9 @@ class mvganD(BaseModel):
         print('-----------------------------------------------')
 
         beta1, beta2 = opt.beta1, opt.beta2
-        lr = opt.lr
-        self.optimizer_D = torch.optim.Adam(self.netD_img.parameters(), lr=lr, betas=(beta1, beta2))
-        self.optimizer_D_T = torch.optim.Adam(self.netD_vid.parameters(), lr=lr, betas=(beta1, beta2)) if opt.net_type == 'video' else None
+        self.old_lr = opt.lr
+        self.optimizer_D = torch.optim.Adam(self.netD_img.parameters(), lr=self.old_lr, betas=(beta1, beta2))
+        self.optimizer_D_T = torch.optim.Adam(self.netD_vid.parameters(), lr=self.old_lr, betas=(beta1, beta2)) if opt.net_type == 'video' else None
 
         if opt.continue_train or opt.load_pretrain:
             self.load_network(self.netD_img, 'D', opt.which_epoch, opt.load_pretrain)
@@ -68,13 +68,13 @@ class mvganD(BaseModel):
             if tensor_list[0].size(0) == 0:
                 return [self.Tensor(1, 1).fill_(0.0) * (len(self.loss_name_T) if type=='video' else len(self.loss_name))]
         if type == 'video':
-            if self.net_type == 'video':
+            if self.net_type == 'video' and self.scale == 0:
                 loss_D_T_real, loss_D_T_fake, loss_G_T_GAN, loss_G_T_Feat = self.compute_loss_D_T(self.netD_vid, real_B, fake_B, real_A)
                 loss_list = [loss_D_T_real, loss_D_T_fake, loss_G_T_GAN, loss_G_T_Feat ]
                 loss_list = [loss.view(-1, 1) for loss in loss_list]
                 return loss_list
             else:
-                return [self.Tensor(1, 1).fill_(0.0) * len(self.loss_names_T)]
+                return [self.Tensor(1, 1).fill_(0.0)] * len(self.loss_names_T)
 
 
         _, _, self.height, self.width = real_B.size()

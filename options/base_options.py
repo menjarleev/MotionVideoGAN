@@ -24,7 +24,7 @@ class BaseOptions():
         # generator
         self.parser.add_argument('--pref', type=int, default=8, help='number of out channel before encoder & after decoder')
         self.parser.add_argument('--ngf', type=int, default=32, help='number of initial generator kernel')
-        self.parser.add_argument('--n_block', type=int, default=4, help='number of RCBAM in the network')
+        self.parser.add_argument('--n_block', type=int, default=8, help='number of ResBlock in the network')
 
         # discriminator
         self.parser.add_argument('--ndf', type=int, default=32, help='number of initial discriminator kernel')
@@ -99,6 +99,9 @@ class BaseOptions():
                 print("%s exists" % expr_dir)
             else:
                 os.makedirs(expr_dir)
+        elif self.opt.continue_train:
+            if os.path.isdir(expr_dir):
+                print('continue train with dir %s' % expr_dir)
         else:
             if os.path.isdir(expr_dir):
                 raise FileNotFoundError('%s exists' %expr_dir)

@@ -53,7 +53,7 @@ def train():
 
 
 
-            update_model_weights(opt, total_steps, dataset_size, modelG, modelD)
+            update_model_weights(total_steps, dataset_size, modelG, modelD)
             if opt.debug:
                 call(["nvidia-smi", "--format=csv", "--query-gpu=memory.used,memory.free"])
             #################### Display results and erros ####################
@@ -84,7 +84,7 @@ def train():
         update_models(opt, epoch, modelG, modelD, data_loader)
 
 def backward(opt, loss_G, loss_D, loss_D_T, optimizer_G, optimizer_D, optimizer_D_T):
-    if opt.net_type == 'video':
+    if opt.net_type == 'video' and opt.scale == 0:
         loss_backward(opt, loss_D_T, optimizer_D_T)
     loss_backward(opt, loss_G, optimizer_G)
     loss_backward(opt, loss_D, optimizer_D)

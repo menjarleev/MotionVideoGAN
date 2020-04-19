@@ -22,7 +22,7 @@ class TrainOptions(BaseOptions):
         self.parser.add_argument('--step_decay_ratio', type=float, default=0.5, help='ratio to progressively increase generator weight from 0 to 1 in regards of an epoch')
         self.parser.add_argument('--next_scale', type=bool, default=True, help='is opt.scale next scale or current scale')
         self.parser.add_argument('--continue_train', action='store_true', help='whether continue to train model with current scale')
-        self.parser.add_argument('--niter_weight_update', type=int, default=2, help='how many epochs to spend to upscale image gradually')
+        self.parser.add_argument('--niter_weight_update', type=int, default=1, help='how many epochs to spend to upscale image gradually')
 
         # loss term
         self.parser.add_argument('--gan_mode', type=str, default='ls', help='[ls|origin|hinge]')
