@@ -118,6 +118,7 @@ class BaseModel(t.nn.Module):
         self.scale = scale
 
 
+
     def concat(self,  tensors, dim=0):
         if tensors[0] is not None and tensors[1] is not None:
             tensors_cat =[]

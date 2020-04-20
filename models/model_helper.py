@@ -92,8 +92,9 @@ class VGGLoss(nn.Module):
 
 class StructLoss(nn.Module):
     # TODO implement struct loss with pretrained openpose model
-    def __init__(self):
+    def __init__(self, gpu_id=0):
         super(StructLoss, self).__init__()
+
 
     def __call__(self, real_A, real_B):
         pass

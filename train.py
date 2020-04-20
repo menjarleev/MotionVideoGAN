@@ -1,7 +1,7 @@
 import os
 import torch
 from options.train_options import TrainOptions
-from models.models import create_model, create_optimizer, init_params, save_models, update_models, init_model_states, update_model_weights, detach_model_states
+from models.models import create_model, create_optimizer, init_params, save_models, update_models, init_model_states, update_weights, detach_model_states
 from data.data_loader import CreateDataLoader
 from subprocess import call
 from util.visualizer import Visualizer
@@ -52,8 +52,7 @@ def train():
                 detach_model_states(opt, modelG)
 
 
-
-            update_model_weights(total_steps, dataset_size, modelG, modelD)
+            update_weights(opt, total_steps, dataset_size, modelG, modelD)
             if opt.debug:
                 call(["nvidia-smi", "--format=csv", "--query-gpu=memory.used,memory.free"])
             #################### Display results and erros ####################

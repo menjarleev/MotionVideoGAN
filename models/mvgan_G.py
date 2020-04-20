@@ -68,8 +68,8 @@ class mvganG(BaseModel):
     def encode_input(self, input_map, real_image):
         size = input_map.size()
         self.bs, tG, self.input_dim , self.height, self.width = size[0], size[1], size[2], size[3], size[4]
-        input_map = input_map.cuda()
-        real_image = real_image.cuda()
+        input_map = input_map.cuda(self.gpus_gen[0])
+        real_image = real_image.cuda(self.gpus_gen[0])
         return input_map, real_image
 
     def forward(self, input_A, input_B, dummy_bs=0):
@@ -102,8 +102,27 @@ class mvganG(BaseModel):
             fake_B = netG[net_id](input_Ai, self.scale, self.old_w).unsqueeze(1)
             # if self.scale == 0 and (t + 1) % self.n_frames_bp == 0:
             #         netG[0][net_id].detach_state()
-            fake_Bs = fake_B if fake_Bs is None else torch.cat([fake_Bs, fake_B.cuda(dest_id)], dim=1)
-        return fake_Bs
+            fake_Bs = fake_B if fake_Bs is None else torch.cat([fake_Bs, fake_B], dim=1)
+        return fake_Bs.cuda(dest_id)
+
+    def inference(self, input_A, input_B):
+        assert self.scale == 0
+        self.netG.eval()
+        real_A, real_B = self.encode_input(input_A, input_B)
+        fake_B = self.generate_frame_infer(real_A)
+        return fake_B, input_A
+
+
+
+    def generate_frame_infer(self, real_A):
+        dest_id = self.gpus_gen[0]
+        fake_Bs = None
+        tG = self.opt.n_frames_G
+        _, _, _, h, w = real_A.size()
+        real_A_reshaped = real_A[0, :tG].view(1, -1, h, w)
+        fake_B = self.netG(real_A_reshaped, 0, 1)
+        fake_Bs = fake_B if fake_Bs is None else torch.cat([fake_Bs, fake_B], dim=1)
+        return fake_Bs.cuda(dest_id)
 
 
 

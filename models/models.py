@@ -155,7 +155,7 @@ def init_params(opt, modelG, modelD, data_loader):
     print_freq = lcm(opt.print_freq, opt.batch_size)
     total_steps = (start_epoch - 1) * len(data_loader) + epoch_iter
     total_steps = total_steps // print_freq * print_freq
-    update_model_weights(total_steps, len(data_loader), modelG, modelD)
+    update_weights(opt, total_steps, len(data_loader), modelG, modelD)
     return n_gpus, tG, tD, start_epoch, epoch_iter, print_freq, total_steps, iter_path, input_dim, output_dim
 
 def update_models(opt, epoch, modelG, modelD, data_loader):
@@ -163,11 +163,21 @@ def update_models(opt, epoch, modelG, modelD, data_loader):
         modelG.module.update_learning_rate(epoch, 'G')
         modelD.module.update_learning_rate(epoch, 'D')
 
-def update_model_weights(total_step, step_length, modelG, modelD):
+
+def update_model_weights(opt, total_step, step_length, modelG, modelD):
     old, new = modelG.module.update_weight(total_step, step_length)
     _, _ = modelD.module.update_weight(total_step, step_length)
-    if old != new:
+    if old != new and (total_step % opt.print_update_freq == 0 or opt.debug):
         print('update upscale model weight from %.4f to %.4f' %(old, new))
+
+def update_d_vid_weights(opt, total_step, step_length, modelD):
+    old, new = modelD.module.update_vid_weights(total_step, step_length)
+    if old != new and (total_step % opt.print_update_freq == 0 or opt.debug):
+        print('update video discriminator weight from %.4f to %.4f' %(old, new))
+
+def update_weights(opt, total_step, step_length, modelG, modelD):
+    update_model_weights(opt, total_step, step_length, modelG, modelD)
+    update_d_vid_weights(opt, total_step, step_length, modelD)
 
 
 def save_models(opt, epoch, epoch_iter, total_steps, visualizer, iter_path, modelG, modelD, end_of_epoch=False):

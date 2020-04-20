@@ -10,6 +10,7 @@ class TrainOptions(BaseOptions):
         self.parser.add_argument('--pref_video_D', type=int, default=16, help='the output size of first from_RGB block of video_D')
         self.parser.add_argument('--pref_image_D', type=int, default=16, help='the output size of first from_RGB block of image_D')
         self.parser.add_argument('--print_freq', type=int, default=100, help='frequency of showing training result on the console')
+        self.parser.add_argument('--print_update_freq', type=int, default=1000, help='frequency of showing how weight of vid dis and upscale change')
         self.parser.add_argument('--phase', type=str, default='train', help='phase of the model, pick from [train, val, test]')
         self.parser.add_argument('--n_frame', type=int, default=3, help='number of frame to feed into g/d per iteration when train video')
         self.parser.add_argument('--n_frames_D', type=int, default=3, help='# of frames feed into video discriminator')
@@ -30,6 +31,7 @@ class TrainOptions(BaseOptions):
         self.parser.add_argument('--no_vgg', action='store_true', help='do not use perceptual loss')
         self.parser.add_argument('--no_struct', action='store_true', help='do not use structure loss')
         self.parser.add_argument('--no_texture', action='store_true', help='do not use texture loss')
+        self.parser.add_argument('--niter_vid_update', type=int, default=3, help='for how many epoch the weight of video discriminator grow up to 1')
         # weight of loss
         self.parser.add_argument('--lambda_feat', type=float, default=10.0, help='weight of feature loss for both video/image')
         self.parser.add_argument('--lambda_struct', type=float, default=10.0, help='weight of structure loss for model')

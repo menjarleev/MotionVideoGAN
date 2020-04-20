@@ -19,6 +19,7 @@ class mvganD(BaseModel):
         self.net_type = opt.net_type
         self.scale = opt.scale
         self.old_w = 1.0
+        self.vid_weight = 1.0
         self.split_gpus = (self.opt.n_gpus_gen < len(self.opt.gpu_ids)) and (self.opt.batch_size == 1)
         self.gpus_dis = self.opt.gpu_ids[self.opt.n_gpus_gen + 1:] if self.split_gpus else self.gpu_ids
         if opt.net_type == 'video':
@@ -71,7 +72,7 @@ class mvganD(BaseModel):
             if self.net_type == 'video' and self.scale == 0:
                 loss_D_T_real, loss_D_T_fake, loss_G_T_GAN, loss_G_T_Feat = self.compute_loss_D_T(self.netD_vid, real_B, fake_B, real_A)
                 loss_list = [loss_D_T_real, loss_D_T_fake, loss_G_T_GAN, loss_G_T_Feat ]
-                loss_list = [loss.view(-1, 1) for loss in loss_list]
+                loss_list = [loss.view(-1, 1) * self.vid_weight for loss in loss_list]
                 return loss_list
             else:
                 return [self.Tensor(1, 1).fill_(0.0)] * len(self.loss_names_T)
@@ -138,3 +139,8 @@ class mvganD(BaseModel):
         loss_G_T_GAN, loss_G_T_GAN_Feat = self.GAN_and_FM_loss(pred_real, pred_fake)
         return loss_D_T_real, loss_D_T_fake, loss_G_T_GAN, loss_G_T_GAN_Feat
 
+    def update_vid_weights(self, total_step, step_length):
+        if self.scale == 0 and self.opt.niter_vid_update * step_length >= total_step:
+            old = self.vid_weight
+            self.vid_weight = total_step / (self.opt.niter_vid_update * step_length)
+            return old, self.vid_weight
