@@ -38,6 +38,7 @@ class Body(object):
             imageToTest_padded, pad = util.padRightDownCorner(imageToTest, stride, padValue)
             im = np.transpose(np.float32(imageToTest_padded[:, :, :, np.newaxis]), (3, 2, 0, 1)) / 256 - 0.5
             im = np.ascontiguousarray(im)
+            # im = np.transpose(np.float32(oriImg[:, :, :, np.newaxis]), (3, 2, 0,1)) / 256 - 0.5
 
             data = torch.from_numpy(im).float()
             if torch.cuda.is_available():

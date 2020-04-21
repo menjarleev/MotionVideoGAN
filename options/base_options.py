@@ -24,7 +24,8 @@ class BaseOptions():
         # generator
         self.parser.add_argument('--pref', type=int, default=8, help='number of out channel before encoder & after decoder')
         self.parser.add_argument('--ngf', type=int, default=32, help='number of initial generator kernel')
-        self.parser.add_argument('--n_block', type=int, default=8, help='number of ResBlock in the network')
+        self.parser.add_argument('--n_res_block', type=int, default=4, help='number of ResBlock in the network')
+        self.parser.add_argument('--n_recursive_block', type=int, default=4, help='number of Rconv in the network')
 
         # discriminator
         self.parser.add_argument('--ndf', type=int, default=32, help='number of initial discriminator kernel')
@@ -48,12 +49,13 @@ class BaseOptions():
         self.parser.add_argument('--debug', action='store_true', help='activate debug, change display freq')
         self.parser.add_argument('--checkpoints_dir', type=str, default='./checkpoints', help='where to save checkpoints')
         self.parser.add_argument('--name', type=str, default='experiment', help='the experiment name')
-        self.parser.add_argument('--model', type=str, default='mvgan', help='the name of the model')
-        self.parser.add_argument('--net_type', type=str, default='video', help='type of network, choose from [video, image]')
+        self.parser.add_argument('--model', type=str, default='mvgan_img', help='the name of the model choose from [mvgan_img, mvgan_vid]')
+        self.parser.add_argument('--net_type', type=str, default='VAE', help='type of network, choose from [VAE, recursive, image, video]')
         self.parser.add_argument('--gpu_ids', type=str, default='0', help='gpu ids: e.g. 0,1,2 use -1 for CPU')
         self.parser.add_argument('--n_gpus_gen', type=int, default=1, help='# of gpu used for generator')
         self.parser.add_argument('--scale', type=int, default=0, help='the scale of network to use')
         self.parser.add_argument('--add_face_disc', action='store_true', help='add face region GAN')
+        self.parser.add_argument('--label_nc', type=int, default=0, help='number of label channel, default to 0 to not use it')
 
         self.parser.add_argument('--tf_log', action='store_true', help='if specified, use tensorboard logging. Requires tensorflow installed')
         self.parser.add_argument('--display_winsize', type=int, default=512,  help='display window size')

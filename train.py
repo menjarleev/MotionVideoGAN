@@ -1,10 +1,11 @@
 import os
 import torch
 from options.train_options import TrainOptions
-from models.models import create_model, create_optimizer, init_params, save_models, update_models, init_model_states, update_weights, detach_model_states
+from models.models import create_model, create_optimizer, init_params, save_models, update_models, init_model_state, update_weights, detach_model_state
 from data.data_loader import CreateDataLoader
 from subprocess import call
 from util.visualizer import Visualizer
+from torch.autograd import Variable
 from util import util
 import time
 
@@ -28,6 +29,7 @@ def train():
     visualizer = Visualizer(opt)
 
     for epoch in range(start_epoch, opt.niter + opt.niter_decay + 1):
+        update_model_status(opt, epoch, modelG)
         epoch_start_time = time.time()
         for idx, data in enumerate(dataset, start=epoch_iter):
             if total_steps % print_freq == 0:
@@ -36,23 +38,36 @@ def train():
             epoch_iter += opt.batch_size
 
             save_fake = total_steps % opt.display_freq == 0
-            n_frames_total, n_frames_load, t_len = data_loader.dataset.init_data_params(data, n_gpus, tG)
-            init_model_states(opt, modelG)
-            for i in range(0, n_frames_total, n_frames_load):
-                input_A, input_B = data_loader.dataset.prepare_data(data, i, input_dim, output_dim)
-                real_A, real_B, fake_B = modelG(input_A, input_B)
-                losses = modelD(reshape([real_A, real_B, fake_B]), 'image')
+            if opt.model == 'mvgan_img':
+                real_A, real_B, fake_B = modelG(Variable(data['A']), Variable(data['B']))
+                losses = modelD([real_A, real_B, fake_B], 'image')
                 losses = [torch.mean(x) for x in losses]
                 loss_dict = dict(zip(modelD.module.loss_names, losses))
-                losses_T = modelD([real_A, real_B, fake_B], 'video')
-                losses_T = [torch.mean(x) for x in losses_T]
-                loss_dict_T = dict(zip(modelD.module.loss_names_T, losses_T))
-                loss_G, loss_D, loss_D_T = modelD.module.get_losses(loss_dict, loss_dict_T)
+                loss_G, loss_D, loss_D_T = modelD.module.get_losses(loss_dict, None)
                 backward(opt, loss_G, loss_D, loss_D_T, optimizer_G, optimizer_D, optimizer_D_T)
-                detach_model_states(opt, modelG)
+                update_weights(opt, total_steps, dataset_size, modelG, modelD)
 
-
-            update_weights(opt, total_steps, dataset_size, modelG, modelD)
+            elif opt.model == 'mvgan_vid':
+                n_frames_total, n_frames_load, t_len = data_loader.dataset.init_data_params(data, n_gpus, tG)
+                init_model_state(opt, modelG)
+                for i in range(0, n_frames_total, n_frames_load):
+                    input_A, input_B = data_loader.dataset.prepare_data(data, i, input_dim, output_dim)
+                    real_A, real_B, fake_B = modelG(input_A, input_B)
+                    losses = modelD(reshape([real_A, real_B, fake_B]), 'image')
+                    losses = [torch.mean(x) for x in losses]
+                    loss_dict = dict(zip(modelD.module.loss_names, losses))
+                    losses_T = None
+                    loss_dict_T = None
+                    if opt.net_type == 'video':
+                        losses_T = modelD([real_A, real_B, fake_B], 'video')
+                        losses_T = [torch.mean(x) for x in losses_T]
+                        loss_dict_T = dict(zip(modelD.module.loss_names_T, losses_T))
+                    loss_G, loss_D, loss_D_T = modelD.module.get_losses(loss_dict, loss_dict_T)
+                    backward(opt, loss_G, loss_D, loss_D_T, optimizer_G, optimizer_D, optimizer_D_T)
+                    detach_model_state(opt, modelG)
+                update_weights(opt, total_steps, dataset_size, modelG, modelD)
+            else:
+                raise NotImplementedError('model %s is not implemented' % opt.model)
             if opt.debug:
                 call(["nvidia-smi", "--format=csv", "--query-gpu=memory.used,memory.free"])
             #################### Display results and erros ####################
@@ -60,7 +75,8 @@ def train():
             if total_steps % print_freq == 0:
                 t = (time.time() - iter_start_time) / print_freq
                 errors = {k: v.data.item() if not isinstance(v, int) else v for k, v in loss_dict.items()}
-                errors.update({k: v.data.item() if not isinstance(v, int) else v for k, v in loss_dict_T.items()})
+                if opt.model == 'mvgan_vid' and opt.net_type == 'video':
+                    errors.update({k: v.data.item() if not isinstance(v, int) else v for k, v in loss_dict_T.items()})
                 visualizer.print_current_errors(epoch, epoch_iter, errors, t)
                 visualizer.plot_current_errors(errors, total_steps)
 
@@ -83,11 +99,16 @@ def train():
         update_models(opt, epoch, modelG, modelD, data_loader)
 
 def backward(opt, loss_G, loss_D, loss_D_T, optimizer_G, optimizer_D, optimizer_D_T):
-    if opt.net_type == 'video' and opt.scale == 0:
+    if opt.net_type == 'video' and opt.scale == 0 and optimizer_D_T is not None:
         loss_backward(opt, loss_D_T, optimizer_D_T)
     loss_backward(opt, loss_G, optimizer_G)
     loss_backward(opt, loss_D, optimizer_D)
 
+def update_model_status(opt, curr_epoch, modelG):
+    if opt.net_type == 'recursive' and curr_epoch <= opt.niter_recursive:
+        modelG.module.netG.train_recursive()
+    if opt.net_type == 'recursive' and curr_epoch > opt.niter_recursive:
+        modelG.module.netG.train_full()
 
 def loss_backward(opt,loss, optimizer):
     optimizer.zero_grad()

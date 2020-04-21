@@ -4,7 +4,7 @@ from collections import OrderedDict
 from options.test_options import TestOptions
 from torch.autograd import Variable
 from data.data_loader import CreateDataLoader
-from models.models import create_model, init_model_states
+from models.models import create_model, init_model_state
 import util.util as util
 from util.visualizer import Visualizer
 
@@ -32,7 +32,7 @@ def test():
         _, _, height, width = data['A'].size()
         A = Variable(data['A'].view(1, -1, input_dim, height, width))
         B = Variable(data['B'].view(1, -1, output_dim, height, width)) if len(data['B'].size()) > 2 else None
-        init_model_states(opt, model)
+        init_model_state(opt, model)
         generated = model.inference(A, B)
         real_A = util.tensor2im(generated[1], normalize=False)
         visual_list = [('real_A', real_A),

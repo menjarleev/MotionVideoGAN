@@ -10,7 +10,8 @@ def CreateDataset(opt):
         from .pose_dataset import PoseDataset
         dataset = PoseDataset()
     elif opt.dataset_mode == 'image':
-        pass
+        from .align_dataset import AlignedDataset
+        dataset = AlignedDataset()
     else:
         raise ValueError('Dataset [%s] is not recognized' % opt.dataset_mode)
     print('dataset [%s] was created' % dataset.name())

@@ -24,11 +24,11 @@ class mvganD(BaseModel):
         self.gpus_dis = self.opt.gpu_ids[self.opt.n_gpus_gen + 1:] if self.split_gpus else self.gpu_ids
         if opt.net_type == 'video':
             self.netD_vid = define_D(opt, 'video')
-        elif opt.net_type =='image':
+        elif opt.net_type =='image' or opt.net_type == 'recursive' or opt.net_type == 'VAE':
             self.tD = 1
 
         print('---------- Networks initialized -------------')
-        print('-----------------------------------------------')
+        print('---------------------------------------------')
 
         beta1, beta2 = opt.beta1, opt.beta2
         self.old_lr = opt.lr
@@ -54,7 +54,7 @@ class mvganD(BaseModel):
 
         self.loss_names = ['G_VGG', 'G_GAN', 'G_GAN_Feat', 'G_Struct', 'G_Texture',
                            'D_real', 'D_fake']
-        if opt.net_type:
+        if opt.net_type == 'video':
             self.loss_names_T = ['D_T_real', 'D_T_fake', 'G_T_GAN', 'G_T_GAN_Feat']
 
 
@@ -64,10 +64,10 @@ class mvganD(BaseModel):
         lambda_struct = self.opt.lambda_struct
         lambda_texture = self.opt.lambda_texture
         real_A, real_B, fake_B = tensor_list
-        if tensor_list[0].get_device() == self.gpus_dis[0]:
-            tensor_list = util.remove_dummy_from_tensor(tensor_list, dummy_bs)
-            if tensor_list[0].size(0) == 0:
-                return [self.Tensor(1, 1).fill_(0.0) * (len(self.loss_name_T) if type=='video' else len(self.loss_name))]
+        # if tensor_list[0].get_device() == self.gpus_dis[0]:
+        #     tensor_list = util.remove_dummy_from_tensor(tensor_list, dummy_bs)
+        #     if tensor_list[0].size(0) == 0:
+        #         return [self.Tensor(1, 1).fill_(0.0) * (len(self.loss_name_T) if type=='video' else len(self.loss_name))]
         if type == 'video':
             if self.net_type == 'video' and self.scale == 0:
                 loss_D_T_real, loss_D_T_fake, loss_G_T_GAN, loss_G_T_Feat = self.compute_loss_D_T(self.netD_vid, real_B, fake_B, real_A)
@@ -96,11 +96,13 @@ class mvganD(BaseModel):
             self.save_optimizer(self.optimizer_D_T, 'D_T', label)
 
     def get_losses(self, loss_dict, loss_dict_T):
+        loss_D_T = None
         loss_D = (loss_dict['D_fake'] + loss_dict['D_real']) * 0.5
         loss_G = loss_dict['G_GAN'] + loss_dict['G_GAN_Feat'] + loss_dict['G_VGG'] \
-                 + loss_dict['G_Struct'] + loss_dict['G_Texture'] + loss_dict_T['G_T_GAN'] \
-                 + loss_dict_T['G_T_GAN_Feat']
-        loss_D_T = (loss_dict_T['D_T_real'] + loss_dict_T['D_T_fake']) * 0.5
+                 + loss_dict['G_Struct'] + loss_dict['G_Texture']
+        if self.opt.net_type == 'video' and loss_dict_T is not None:
+            loss_G += loss_dict_T['G_T_GAN'] + loss_dict_T['G_T_GAN_Feat']
+            loss_D_T = (loss_dict_T['D_T_real'] + loss_dict_T['D_T_fake']) * 0.5
         return loss_G, loss_D, loss_D_T
 
     def GAN_and_FM_loss(self, pred_real, pred_fake):
@@ -144,3 +146,5 @@ class mvganD(BaseModel):
             old = self.vid_weight
             self.vid_weight = total_step / (self.opt.niter_vid_update * step_length)
             return old, self.vid_weight
+        else:
+            return self.vid_weight, self.vid_weight

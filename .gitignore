@@ -11,3 +11,6 @@ demo_camera.py
 **/pytorch-openpose/requirements.txt
 
 .DS_Store
+
+*.sh
+**/scropt/

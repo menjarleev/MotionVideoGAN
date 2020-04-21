@@ -16,14 +16,14 @@ class TrainOptions(BaseOptions):
         self.parser.add_argument('--n_frames_D', type=int, default=3, help='# of frames feed into video discriminator')
         self.parser.add_argument('--lr', type=float, default=0.0002, help='initial learning rate for adam')
         self.parser.add_argument('--niter', type=int, default=10, help='# of iter at starting learning rate')
+        self.parser.add_argument('--niter_recursive', type=int, default=5, help='# of iter to train recursive component')
         self.parser.add_argument('--niter_decay', type=int, default=10, help='# of iter to linearly decay learning rate to zero')
         self.parser.add_argument('--which_epoch', type=str, default='latest', help='which epoch to load? set to latest to use latest cached model')
         self.parser.add_argument('--beta1', type=float, default=0.5, help='momentum term of adam')
         self.parser.add_argument('--beta2', type=float, default=0.999, help='momentum term2 of adam')
-        self.parser.add_argument('--step_decay_ratio', type=float, default=0.5, help='ratio to progressively increase generator weight from 0 to 1 in regards of an epoch')
         self.parser.add_argument('--next_scale', type=bool, default=True, help='is opt.scale next scale or current scale')
         self.parser.add_argument('--continue_train', action='store_true', help='whether continue to train model with current scale')
-        self.parser.add_argument('--niter_weight_update', type=int, default=1, help='how many epochs to spend to upscale image gradually')
+        self.parser.add_argument('--niter_weight_update', type=int, default=5, help='how many epochs to spend to upscale image gradually')
 
         # loss term
         self.parser.add_argument('--gan_mode', type=str, default='ls', help='[ls|origin|hinge]')

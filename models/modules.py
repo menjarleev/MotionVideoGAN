@@ -1,7 +1,7 @@
-import torch as t
+import torch
 from torch import nn
 
-class Conv(t.nn.Module):
+class Conv(nn.Module):
     def __init__(self, in_channel, out_channel, kernel_size=3, stride=1, padding='reflect', bias=False):
         super(Conv, self).__init__()
         self.conv = nn.Sequential(nn.ReflectionPad2d(kernel_size // 2),
@@ -40,9 +40,9 @@ class SpatialAttention(nn.Module):
         self.sigmoid = nn.Sigmoid()
 
     def forward(self, x):
-        avg_out = t.mean(x, dim=1, keepdim=True)
-        max_out, _ = t.max(x, dim=1, keepdim=True)
-        x = t.cat([avg_out, max_out], dim=1)
+        avg_out = torch.mean(x, dim=1, keepdim=True)
+        max_out, _ = torch.max(x, dim=1, keepdim=True)
+        x = torch.cat([avg_out, max_out], dim=1)
         x = self.conv1(x)
         return self.sigmoid(x)
 
@@ -86,34 +86,61 @@ class RCBAM(nn.Module):
         x = self.norm2(x)
         return x + feature
 
+class RConv(nn.Module):
+    def __init__(self, n_channel, ratio=4, padding='reflect', activation=nn.ReLU(True)):
+        super(RConv, self).__init__()
+        self.n_channel = n_channel
+        in_channel = n_channel * 2
+        self.net = nn.Sequential(Conv(in_channel, in_channel // ratio, padding=padding), activation, Conv(in_channel // ratio, in_channel, padding=padding))
+        self.hidden_state = None
 
-class RCLSTMBAM(t.nn.Module):
-    def __init__(self, n_channel, input_size, kernel_size=3, stride=1, padding='reflect'):
+    def init_state(self, feature_size, batch_size=1, gpu_id=0):
+        self.hidden_state = torch.zeros(batch_size, self.n_channel, feature_size[0], feature_size[1]).cuda(gpu_id)
+        return self.hidden_state
+
+    def detach_state(self):
+        self.hidden_state = self.hidden_state.detach()
+
+    def forward(self, feature):
+        x = torch.cat([feature, self.hidden_state], dim=1)
+        x = self.net(x)
+        out, self.hidden_state = torch.split(x, self.n_channel, dim=1)
+        return out + feature
+
+
+
+class RCLSTMBAM(nn.Module):
+    def __init__(self, n_channel, kernel_size=3, stride=1, padding='reflect'):
         super(RCLSTMBAM, self).__init__()
-
-        self.feature_size = input_size
         self.n_channel = n_channel
         self.compression = Conv(n_channel * 2, n_channel * 4, kernel_size=kernel_size, stride=stride, padding=padding)
         self.out = Conv(n_channel, n_channel, kernel_size=kernel_size, stride=stride, padding=padding)
+        self.cell_state = None
+        self.hidden_state = None
 
-    def forward(self, original_input, cell_state, hidden_state):
-        combined_input = t.cat([original_input, hidden_state], 1)
+    def forward(self, original_input):
+        combined_input = torch.cat([original_input, self.hidden_state], 1)
         combined_conv = self.compression(combined_input)
-        cc_i, cc_f, cc_o, cc_g = t.split(combined_conv, self.n_channel, dim = 1)
-        i = t.sigmoid(cc_i)
-        f = t.sigmoid(cc_f)
-        o = t.sigmoid(cc_o)
-        g = t.tanh(cc_g)
-        c_next = f * cell_state + i * g
-        h_next = o * t.tanh(c_next)
+        cc_i, cc_f, cc_o, cc_g = torch.split(combined_conv, self.n_channel, dim = 1)
+        i = torch.sigmoid(cc_i)
+        f = torch.sigmoid(cc_f)
+        o = torch.sigmoid(cc_o)
+        g = torch.tanh(cc_g)
+        self.cell_state = f * self.cell_state + i * g
+        self.hidden_state = o * torch.tanh(self.cell_state)
         # activation
-        x = t.relu(self.out(h_next))
+        x = torch.relu(self.out(self.hidden_state))
         out = original_input + x
-        return out, c_next, h_next
+        return out
 
-    def init_hidden(self, batch_size=1, gpu_id=0):
-        return (t.zeros(batch_size, self.n_channel, self.feature_size, self.feature_size).cuda(gpu_id),
-                t.zeros(batch_size, self.n_channel, self.feature_size, self.feature_size).cuda(gpu_id))
+    def init_state(self, feature_size, batch_size=1, gpu_id=0):
+        self.hidden_state = torch.zeros(batch_size, self.n_channel, feature_size, feature_size).cuda(gpu_id)
+        self.cell_state = torch.zeros(batch_size, self.n_channel, feature_size, feature_size).cuda(gpu_id)
+        return [self.hidden_state, self.cell_state]
+
+    def detach_state(self):
+        self.hidden_state = self.hidden_state.detach()
+        self.cell_state = self.cell_state.detach()
 
 class ResnetBlock(nn.Module):
     def __init__(self, dim,  norm_layer, activation=nn.ReLU(True), use_dropout=False, padding_type='reflect'):
@@ -157,30 +184,36 @@ class ResnetBlock(nn.Module):
         return out
 
 
-class ConvLSTMBAM(t.nn.Module):
-    def __init__(self, n_channel, input_size, kernel_size=3, stride=1, padding='reflect'):
+class ConvLSTMBAM(nn.Module):
+    def __init__(self, n_channel, kernel_size=3, stride=1, padding='reflect'):
         super(ConvLSTMBAM, self).__init__()
 
-        self.feature_size = input_size
         self.n_channel = n_channel
         self.compression = Conv(n_channel * 2, n_channel * 4, kernel_size=kernel_size, stride=stride, padding=padding)
         self.out = Conv(n_channel, n_channel, kernel_size=kernel_size, stride=stride, padding=padding)
+        self.cell_state = None
+        self.hidden_state = None
 
-    def forward(self, original_input, cell_state, hidden_state):
-        combined_input = t.cat([original_input, hidden_state], 1)
+    def forward(self, original_input):
+        combined_input = torch.cat([original_input, self.hidden_state], 1)
         combined_conv = self.compression(combined_input)
-        cc_i, cc_f, cc_o, cc_g = t.split(combined_conv, self.n_channel, dim = 1)
-        i = t.sigmoid(cc_i)
-        f = t.sigmoid(cc_f)
-        o = t.sigmoid(cc_o)
-        g = t.tanh(cc_g)
-        c_next = f * cell_state + i * g
-        h_next = o * t.tanh(c_next)
+        cc_i, cc_f, cc_o, cc_g = torch.split(combined_conv, self.n_channel, dim = 1)
+        i = torch.sigmoid(cc_i)
+        f = torch.sigmoid(cc_f)
+        o = torch.sigmoid(cc_o)
+        g = torch.tanh(cc_g)
+        self.cell_state = f * self.cell_state + i * g
+        self.hidden_state = o * torch.tanh(self.cell_state)
         # activation
-        x = t.relu(self.out(h_next))
+        x = torch.relu(self.out(self.hidden_state))
         out = original_input + x
-        return out, c_next, h_next
+        return out
 
-    def init_hidden(self, batch_size=1, gpu_id=0):
-        return (t.zeros(batch_size, self.n_channel, self.feature_size[0], self.feature_size[1]).cuda(gpu_id),
-                t.zeros(batch_size, self.n_channel, self.feature_size[0], self.feature_size[1]).cuda(gpu_id))
+    def init_state(self, feature_size, batch_size=1, gpu_id=0):
+        self.hidden_state = torch.zeros(batch_size, self.n_channel, feature_size[0], feature_size[1]).cuda(gpu_id)
+        self.cell_state = torch.zeros(batch_size, self.n_channel, feature_size[0], feature_size[1]).cuda(gpu_id)
+        return [self.hidden_state, self.cell_state]
+
+    def detach_state(self):
+        self.hidden_state = self.hidden_state.detach()
+        self.cell_state = self.cell_state.detach()

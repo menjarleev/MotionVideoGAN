@@ -1,7 +1,7 @@
 import torch.nn as nn
 import torch
 import numpy as np
-from .generator import ImageGenerator, VideoGenerator
+from .generator import ImageGenerator, VideoGenerator, VAE, RecursiveNet
 from .discriminator import VideoDiscriminator, ImageDiscriminator
 from .model_helper import weights_init
 
@@ -12,16 +12,16 @@ def lcm(a,b): return (abs(a*b) / fractions.gcd(a,b)) if a and b else 0
 def wrap_model(opt, modelG, modelD):
     # TODO wrap generator in a GPU and discriminator, other pretrained model in the other GPU to avoid CUDA out of memory
     if opt.n_gpus_gen == len(opt.gpu_ids):
-        modelG = myModel(opt, modelG)
-        modelD = myModel(opt, modelD)
+        modelG = nn.DataParallel(modelG, device_ids=opt.gpu_ids)
+        modelD = nn.DataParallel(modelD, device_ids=opt.gpu_ids)
     else:
-        if opt.batch_size == 1:
+        if opt.net_type == 'video':
             gpu_split_id = opt.n_gpus_gen + 1
-            modelG = nn.DataParallel(modelG, device_ids=opt.gpu_ids[0:1])
+            modelG = nn.DataParallel(modelG, device_ids=opt.gpu_ids[0:1], output_device=opt.gpu_ids[1])
         else:
             gpu_split_id = opt.n_gpus_gen
-            modelG = nn.DataParallel(modelG, device_ids=opt.gpu_ids[:gpu_split_id])
-        modelD = nn.DataParallel(modelD, device_ids=[opt.gpu_ids[0]] + opt.gpu_ids[gpu_split_id:])
+            modelG = nn.DataParallel(modelG, device_ids=opt.gpu_ids[:gpu_split_id], output_device=opt.gpu_ids[gpu_split_id])
+        modelD = nn.DataParallel(modelD, device_ids=opt.gpu_ids[gpu_split_id:])
     return modelG, modelD
 
 class myModel(nn.Module):
@@ -65,12 +65,15 @@ class myModel(nn.Module):
 
 def create_model(opt):
     print(opt.model)
-    if opt.model == 'mvgan':
-        from .mvgan_G import mvganG
-        modelG = mvganG()
-        if opt.isTrain:
-            from .mvgan_D import mvganD
-            modelD = mvganD()
+    if opt.model == 'mvgan_vid':
+        from .mvgan_model_G import mvganG_vid
+        modelG = mvganG_vid()
+    elif opt.model == 'mvgan_img':
+        from .mvgan_model_G import mvganG_img
+        modelG = mvganG_img()
+    if opt.isTrain:
+        from .mvgan_model_D import mvganD
+        modelD = mvganD()
     else:
         raise ValueError("Model [%s] not recognized" % opt.model)
 
@@ -86,26 +89,36 @@ def create_model(opt):
 
 def create_optimizer(opt, models):
     modelG, modelD = models
+    optimizer_D_T = None
     if opt.fp16:
         from apex import amp
         modelG, optimizer_G = amp.initialize(modelG, modelG.optimizer_G, opt_level='O1')
-        modelD, optimizers_D = amp.initialize(modelD, [modelD.optimizer_D, modelD.optimizer_D_T], opt_level='O1')
-        optimizer_D, optimizer_D_T = optimizers_D
+        if opt.net_type == 'video':
+            modelD, optimizers_D = amp.initialize(modelD, [modelD.optimizer_D, modelD.optimizer_D_T], opt_level='O1')
+            optimizer_D, optimizer_D_T = optimizers_D
+        if opt.net_type == 'image' or opt.net_type == 'VAE' or opt.net_type == 'recursive':
+            modelD, optimizers_D = amp.initialize(modelD, modelD.optimizer_D, opt_level='O1')
         modelG, modelD = wrap_model(opt, modelG, modelD)
     else:
         optimizer_G = modelG.module.optimizer_G
         optimizer_D = modelD.module.optimizer_D
-        optimizer_D_T = modelD.module.optimizer_D_T
+        if opt.net_type == 'video':
+            optimizer_D_T = modelD.module.optimizer_D_T
     return modelG, modelD, optimizer_G, optimizer_D, optimizer_D_T
 
 
 
-def define_G(opt):
+def define_G(opt, which_net):
     netG = None
-    if opt.net_type == 'image':
+    if which_net == 'image':
         netG = ImageGenerator(opt)
-    elif opt.net_type == 'video':
+    elif which_net == 'video':
         netG = VideoGenerator(opt)
+    elif which_net == 'VAE':
+        netG = VAE(opt)
+    elif which_net == 'recursive':
+        netG = RecursiveNet(opt)
+
     else:
         raise NotImplementedError('Generator named [%s] is not implemented' % opt.net_type)
     if len(opt.gpu_ids) > 0:
@@ -118,7 +131,7 @@ def define_G(opt):
 def define_D(opt, which_model_netD):
     if which_model_netD == 'video':
         netD = VideoDiscriminator(opt)
-    elif which_model_netD == 'image':
+    elif which_model_netD == 'image' or which_model_netD == 'VAE' or which_model_netD == 'recursive':
         netD = ImageDiscriminator(opt)
     else:
         raise NotImplementedError('Discriminator named [%s] is not implemented' % which_model_netD)
@@ -175,9 +188,12 @@ def update_d_vid_weights(opt, total_step, step_length, modelD):
     if old != new and (total_step % opt.print_update_freq == 0 or opt.debug):
         print('update video discriminator weight from %.4f to %.4f' %(old, new))
 
-def update_weights(opt, total_step, step_length, modelG, modelD):
-    update_model_weights(opt, total_step, step_length, modelG, modelD)
-    update_d_vid_weights(opt, total_step, step_length, modelD)
+def update_weights(opt, total_step, dataset_size, modelG, modelD):
+    if opt.net_type == 'video' or opt.net_type == 'image' or opt.net_type == 'VAE':
+        step_length = dataset_size * opt.batch_size
+        update_model_weights(opt, total_step, step_length, modelG, modelD)
+        if opt.net_type == 'video':
+            update_d_vid_weights(opt, total_step, step_length, modelD)
 
 
 def save_models(opt, epoch, epoch_iter, total_steps, visualizer, iter_path, modelG, modelD, end_of_epoch=False):
@@ -190,14 +206,14 @@ def save_models(opt, epoch, epoch_iter, total_steps, visualizer, iter_path, mode
             if epoch % opt.save_epoch_freq == 0:
                 modelG.module.save('latest')
                 modelD.module.save('latest')
-                modelG.module.save(epoch)
-                modelD.module.save(epoch)
+                # modelG.module.save(epoch)
+                # modelD.module.save(epoch)
                 np.savetxt(iter_path, (epoch+1, 0), delimiter=',', fmt='%d')
 
-def init_model_states(opt, model):
-    if opt.net_type == 'video' and opt.scale == 0:
-        model.module.init_states(opt.batch_size)
+def init_model_state(opt, model):
+    if opt.net_type == 'video' or opt.net_type == 'recursive' and opt.scale == 0:
+        model.module.init_state(opt.batch_size)
 
-def detach_model_states(opt, model):
-    if opt.net_type == 'video' and opt.scale == 0:
-        model.module.detach_states()
+def detach_model_state(opt, model):
+    if opt.net_type == 'video' or opt.net_type == 'recursive' and opt.scale == 0:
+        model.module.detach_state()

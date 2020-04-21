@@ -45,8 +45,8 @@ class BaseModel(t.nn.Module):
         save_path = os.path.join(self.save_dir, file_name)
         t.save(optimizer.state_dict(), save_path)
 
-    def load_optimizer(self, optimizer, network_label, epoch_label, save_dir=''):
-        file_name = '%s_optimizer_%s.pth' % (epoch_label, network_label)
+    def load_optimizer(self, optimizer, optimizer_label, epoch_label, save_dir=''):
+        file_name = '%s_optimizer_%s.pth' % (epoch_label, optimizer_label)
         if not save_dir:
             save_dir = self.save_dir
         save_path = os.path.join(save_dir, file_name)
@@ -56,7 +56,28 @@ class BaseModel(t.nn.Module):
             try:
                 optimizer.load_state_dict(t.load(save_path))
             except:
-                raise ValueError('optimzer parameters does not fit!')
+                print('Optimizer %s parameters does not match, ignore loading optimizer' % optimizer_label)
+                # pretrained_dict = t.load(save_path)
+                # model_dict = optimizer.state_dict()
+                # initialized = set()
+                # for k, v in pretrained_dict.items():
+                #     initialized.add(k.split('.')[0])
+                # try:
+                #     pretrained_dict = {k: v for k, v in pretrained_dict.items() if k in model_dict}
+                #     optimizer.load_state_dict(pretrained_dict)
+                #     print('Optimizer %s has excessive parameters. Only loading parameters that are used' % optimizer_label)
+                # except:
+                #     print('Optimizer %s has fewer layers. The following are not initialized: ' % optimizer_label)
+                #     not_initialized = set()
+                #     for k, v in pretrained_dict.items():
+                #         if v.size() == model_dict[k].size():
+                #             model_dict[k] = v
+                #
+                #     for k, v in model_dict.items():
+                #         if k not in pretrained_dict or v.size() != pretrained_dict[k].size():
+                #             not_initialized.add(k.split('.')[0])
+                #     print(sorted(not_initialized))
+                #     optimizer.load_state_dict(model_dict)
 
     def load_network(self, network, network_label, epoch_label, save_dir=''):
         file_name = '%s_net_%s.pth' % (epoch_label, network_label)
@@ -72,9 +93,9 @@ class BaseModel(t.nn.Module):
                 pretrained_dict = t.load(save_path)
                 model_dict = network.state_dict()
 
-                initilized = set()
+                initialized = set()
                 for k, v in pretrained_dict.items():
-                    initilized.add(k.split('.')[0])
+                    initialized.add(k.split('.')[0])
                 try:
                     pretrained_dict = {k: v for k, v in pretrained_dict.items() if k in model_dict}
                     network.load_state_dict(pretrained_dict)
