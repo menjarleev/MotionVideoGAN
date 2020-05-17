@@ -3,6 +3,7 @@ import torch
 from options.train_options import TrainOptions
 from models.models import create_model, create_optimizer, init_params, save_models, update_models, init_model_state, update_weights, detach_model_state
 from data.data_loader import CreateDataLoader
+from models.generator import img_net, vid_net
 from subprocess import call
 from util.visualizer import Visualizer
 from torch.autograd import Variable
@@ -58,7 +59,7 @@ def train():
                     loss_dict = dict(zip(modelD.module.loss_names, losses))
                     losses_T = None
                     loss_dict_T = None
-                    if opt.net_type == 'video':
+                    if opt.net_type in vid_net:
                         losses_T = modelD([real_A, real_B, fake_B], 'video')
                         losses_T = [torch.mean(x) for x in losses_T]
                         loss_dict_T = dict(zip(modelD.module.loss_names_T, losses_T))
@@ -75,7 +76,7 @@ def train():
             if total_steps % print_freq == 0:
                 t = (time.time() - iter_start_time) / print_freq
                 errors = {k: v.data.item() if not isinstance(v, int) else v for k, v in loss_dict.items()}
-                if opt.model == 'mvgan_vid' and opt.net_type == 'video':
+                if opt.net_type in vid_net:
                     errors.update({k: v.data.item() if not isinstance(v, int) else v for k, v in loss_dict_T.items()})
                 visualizer.print_current_errors(epoch, epoch_iter, errors, t)
                 visualizer.plot_current_errors(errors, total_steps)
@@ -99,7 +100,7 @@ def train():
         update_models(opt, epoch, modelG, modelD, data_loader)
 
 def backward(opt, loss_G, loss_D, loss_D_T, optimizer_G, optimizer_D, optimizer_D_T):
-    if opt.net_type == 'video' and opt.scale == 0 and optimizer_D_T is not None:
+    if ((opt.net_type == 'video' and opt.scale == 0) or opt.net_type == 'branch') and optimizer_D_T is not None:
         loss_backward(opt, loss_D_T, optimizer_D_T)
     loss_backward(opt, loss_G, optimizer_G)
     loss_backward(opt, loss_D, optimizer_D)

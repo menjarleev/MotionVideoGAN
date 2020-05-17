@@ -40,8 +40,10 @@ class AlignedDataset(BaseDataset):
         B_path = self.B_paths[index]
         B_img = Image.open(B_path).convert('RGB')
         params = get_img_params(self.opt, B_img.size)
+        self.opt.is_B = True
         transform_scaleB = get_transform(self.opt, params)
-        transform_scaleA = get_transform(self.opt, params, method=Image.NEAREST, normalize=False) if self.A_is_label else transform_scaleB
+        self.opt.is_B = False
+        transform_scaleA = get_transform(self.opt, params)
         A = self.get_image(A_path, transform_scaleA)
         B = self.get_image(B_path, transform_scaleB)
 

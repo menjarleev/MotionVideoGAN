@@ -34,11 +34,11 @@ class Body(object):
 
         for m in range(len(multiplier)):
             scale = multiplier[m]
-            imageToTest = cv2.resize(oriImg, (0, 0), fx=scale, fy=scale, interpolation=cv2.INTER_CUBIC)
-            imageToTest_padded, pad = util.padRightDownCorner(imageToTest, stride, padValue)
-            im = np.transpose(np.float32(imageToTest_padded[:, :, :, np.newaxis]), (3, 2, 0, 1)) / 256 - 0.5
-            im = np.ascontiguousarray(im)
-            # im = np.transpose(np.float32(oriImg[:, :, :, np.newaxis]), (3, 2, 0,1)) / 256 - 0.5
+            # imageToTest = cv2.resize(oriImg, (0, 0), fx=scale, fy=scale, interpolation=cv2.INTER_CUBIC)
+            # imageToTest_padded, pad = util.padRightDownCorner(imageToTest, stride, padValue)
+            # im = np.transpose(np.float32(imageToTest_padded[:, :, :, np.newaxis]), (3, 2, 0, 1)) / 256 - 0.5
+            # im = np.ascontiguousarray(im)
+            im = np.transpose(np.float32(oriImg[:, :, :, np.newaxis]), (3, 2, 0,1)) / 256 - 0.5
 
             data = torch.from_numpy(im).float()
             if torch.cuda.is_available():
@@ -53,13 +53,13 @@ class Body(object):
             # heatmap = np.transpose(np.squeeze(net.blobs[output_blobs.keys()[1]].data), (1, 2, 0))  # output 1 is heatmaps
             heatmap = np.transpose(np.squeeze(Mconv7_stage6_L2), (1, 2, 0))  # output 1 is heatmaps
             heatmap = cv2.resize(heatmap, (0, 0), fx=stride, fy=stride, interpolation=cv2.INTER_CUBIC)
-            heatmap = heatmap[:imageToTest_padded.shape[0] - pad[2], :imageToTest_padded.shape[1] - pad[3], :]
+            # heatmap = heatmap[:imageToTest_padded.shape[0] - pad[2], :imageToTest_padded.shape[1] - pad[3], :]
             heatmap = cv2.resize(heatmap, (oriImg.shape[1], oriImg.shape[0]), interpolation=cv2.INTER_CUBIC)
 
             # paf = np.transpose(np.squeeze(net.blobs[output_blobs.keys()[0]].data), (1, 2, 0))  # output 0 is PAFs
             paf = np.transpose(np.squeeze(Mconv7_stage6_L1), (1, 2, 0))  # output 0 is PAFs
             paf = cv2.resize(paf, (0, 0), fx=stride, fy=stride, interpolation=cv2.INTER_CUBIC)
-            paf = paf[:imageToTest_padded.shape[0] - pad[2], :imageToTest_padded.shape[1] - pad[3], :]
+            # paf = paf[:imageToTest_padded.shape[0] - pad[2], :imageToTest_padded.shape[1] - pad[3], :]
             paf = cv2.resize(paf, (oriImg.shape[1], oriImg.shape[0]), interpolation=cv2.INTER_CUBIC)
 
             heatmap_avg += heatmap_avg + heatmap / len(multiplier)

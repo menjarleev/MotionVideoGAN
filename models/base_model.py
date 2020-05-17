@@ -121,7 +121,7 @@ class BaseModel(t.nn.Module):
         self.old_lr = lr
 
     def update_weight(self, total_steps, step_length):
-        if not self.isTrain or self.scale == self.opt.n_downsampling - 1:
+        if not self.isTrain or self.scale == self.opt.n_scale - 1:
             self.old_w = 1
             return self.old_w, self.old_w
         elif total_steps <= self.opt.niter_weight_update * step_length:

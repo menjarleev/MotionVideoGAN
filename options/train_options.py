@@ -24,10 +24,15 @@ class TrainOptions(BaseOptions):
         self.parser.add_argument('--next_scale', type=bool, default=True, help='is opt.scale next scale or current scale')
         self.parser.add_argument('--continue_train', action='store_true', help='whether continue to train model with current scale')
         self.parser.add_argument('--niter_weight_update', type=int, default=5, help='how many epochs to spend to upscale image gradually')
+        self.parser.add_argument('--openpose_path', type=str, default='./models/pretrained_model/body_pose_model.pth', help='the path for pytorch implemented openpose state_dict')
 
         # loss term
+        self.parser.add_argument('--d_n_layers', type=int, default=2, help='number of layers for discriminator')
+        self.parser.add_argument('--num_D', type=int, default=2, help='# of image discriminator')
+        self.parser.add_argument('--d_type', type=str, default='multiscale', help='which discriminator to use, choose from [weighted_multiscale, multiscale, image]')
+
         self.parser.add_argument('--gan_mode', type=str, default='ls', help='[ls|origin|hinge]')
-        self.parser.add_argument('--no_gan_feat', action='store_true', help='do not match discriminator features')
+        self.parser.add_argument('--no_ganFeat', action='store_true', help='do not match discriminator features')
         self.parser.add_argument('--no_vgg', action='store_true', help='do not use perceptual loss')
         self.parser.add_argument('--no_struct', action='store_true', help='do not use structure loss')
         self.parser.add_argument('--no_texture', action='store_true', help='do not use texture loss')

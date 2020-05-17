@@ -1,7 +1,10 @@
 import torch
+import os
 from torch import nn
 import torch.nn.functional as F
 from torch.autograd import Variable
+from .modules import bodypose_model
+from util.util import transfer
 import functools
 
 def weights_init(model):
@@ -92,19 +95,42 @@ class VGGLoss(nn.Module):
 
 class StructLoss(nn.Module):
     # TODO implement struct loss with pretrained openpose model
-    def __init__(self, gpu_id=0):
+    def __init__(self, opt):
         super(StructLoss, self).__init__()
+        self.openpose = bodypose_model()
+        model_path = opt.openpose_path
+        if not os.path.isfile(model_path):
+            raise FileNotFoundError('openpose model path %s is not found' %model_path)
+        gpu_id = opt.gpu_ids[0] if len(opt.gpu_ids) == opt.n_gpus_gen else opt.gpu_ids[opt.n_gpus_gen]
+        self.openpose = self.openpose.cuda(gpu_id)
+        self.weights = [1.0, 1.0, 1.0, 1.0, 1.0, 5.0, 5.0]
+        model_dict = transfer(self.openpose, torch.load(model_path))
+        try:
+            self.openpose.load_state_dict(model_dict)
+            self.openpose.eval()
+            self.downsample = nn.AvgPool2d(2, stride=2, count_include_pad=False)
+            self.criterion = nn.L1Loss()
+        except ValueError:
+            print('model parameters are not fit with file %s' % model_path)
 
-
-    def __call__(self, real_A, real_B):
-        pass
+    def forward(self, x, y):
+        while x.size()[-1] > 512:
+            x, y = self.downsample(x), self.downsample(y)
+        x_openpose, y_openpose = self.openpose(x), self.openpose(y)
+        loss = 0
+        for i in range(len(x_openpose)):
+            loss += self.weights[i] * self.criterion(x_openpose[i], y_openpose[i].detach())
+        return loss
 
 class TextureLoss(nn.Module):
     def __init__(self):
         super(TextureLoss, self).__init__()
+        self.criterion = nn.L1Loss()
 
-    def __call__(self, real_A, real_B, map):
-        pass
+    def __call__(self, x, y):
+        loss = self.criterion(x, y.detach())
+        return loss
+
 
 
 class GANLoss(nn.Module):

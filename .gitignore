@@ -9,6 +9,7 @@ demo.py
 demo_camera.py
 **/pytorch-openpose/model/
 **/pytorch-openpose/requirements.txt
+/models/pretrained_model/
 
 .DS_Store
 

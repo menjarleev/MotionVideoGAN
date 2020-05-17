@@ -16,7 +16,8 @@ class BaseOptions():
         self.parser.add_argument('--resize_or_crop', type=str, default='', help='crop or resize dataset')
 
         # model structure
-        self.parser.add_argument('--n_downsampling', type=int, default=4, help='number of encoder & decoder in the model')
+        self.parser.add_argument('--n_scale', type=int, default=3, help='number of encoder & decoder in the model')
+        self.parser.add_argument('--n_downsampling', type=int, default=4, help='number of downsample after n_scale in the model')
         self.parser.add_argument('--padding_type', type=str, default='reflect', help='padding type, select from [reflect, replicate, zero]')
         self.parser.add_argument('--norm_layer', type=str, default='batch', help='the norm layer of model, choose from [batch, instance]')
         self.parser.add_argument('--upsampler', type=str, default='bicubic', help='the upsampler for decoder, choose from [nearest, linear, bilinear, bicubic]')
@@ -24,7 +25,8 @@ class BaseOptions():
         # generator
         self.parser.add_argument('--pref', type=int, default=8, help='number of out channel before encoder & after decoder')
         self.parser.add_argument('--ngf', type=int, default=32, help='number of initial generator kernel')
-        self.parser.add_argument('--n_res_block', type=int, default=4, help='number of ResBlock in the network')
+        self.parser.add_argument('--n_res_block', type=int, default=8, help='number of ResBlock in the network')
+        self.parser.add_argument('--n_mask_block', type=int, default=4, help='number of ResBlock in mask branch')
         self.parser.add_argument('--n_recursive_block', type=int, default=4, help='number of Rconv in the network')
 
         # discriminator
@@ -36,6 +38,7 @@ class BaseOptions():
         self.parser.add_argument('--input_dim', type=int, default=3, help='number of input channel')
         self.parser.add_argument('--output_dim', type=int, default=3, help='number of output channel')
         self.parser.add_argument('--upsample_type', type=str, default='bicubic', help='which upsample method to use')
+        self.parser.add_argument('--max_channel', type=int, default=256, help='max # of channel for each layer')
 
         self.parser.add_argument('--densepose_only', action='store_true', help='only use dense pose')
         self.parser.add_argument('--openpose_only', action='store_true', help='only use open pose')
@@ -50,12 +53,14 @@ class BaseOptions():
         self.parser.add_argument('--checkpoints_dir', type=str, default='./checkpoints', help='where to save checkpoints')
         self.parser.add_argument('--name', type=str, default='experiment', help='the experiment name')
         self.parser.add_argument('--model', type=str, default='mvgan_img', help='the name of the model choose from [mvgan_img, mvgan_vid]')
-        self.parser.add_argument('--net_type', type=str, default='VAE', help='type of network, choose from [VAE, recursive, image, video]')
+        self.parser.add_argument('--net_type', type=str, default='branch', help='type of network, choose from [VAE, branch, recursive, image, video, stage1, stage2]')
         self.parser.add_argument('--gpu_ids', type=str, default='0', help='gpu ids: e.g. 0,1,2 use -1 for CPU')
         self.parser.add_argument('--n_gpus_gen', type=int, default=1, help='# of gpu used for generator')
         self.parser.add_argument('--scale', type=int, default=0, help='the scale of network to use')
         self.parser.add_argument('--add_face_disc', action='store_true', help='add face region GAN')
         self.parser.add_argument('--label_nc', type=int, default=0, help='number of label channel, default to 0 to not use it')
+        self.parser.add_argument('--blur_ratio', type=int, default=0, help='ratio to downscale and upscale the image')
+
 
         self.parser.add_argument('--tf_log', action='store_true', help='if specified, use tensorboard logging. Requires tensorflow installed')
         self.parser.add_argument('--display_winsize', type=int, default=512,  help='display window size')

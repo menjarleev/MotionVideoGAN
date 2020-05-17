@@ -40,6 +40,13 @@ def save_all_tensors(opt, real_A, fake_B, real_B, modelD):
     return visuals
 
 
+# transfer caffe model to pytorch which will match the layer name
+def transfer(model, model_weights):
+    transfered_model_weights = {}
+    for weights_name in model.state_dict().keys():
+        transfered_model_weights[weights_name] = model_weights['.'.join(weights_name.split('.')[1:])]
+    return transfered_model_weights
+
 # Converts a Tensor into a Numpy array
 # |imtype|: the desired type of the converted numpy array
 def tensor2im(image_tensor, imtype=np.uint8, normalize=True):

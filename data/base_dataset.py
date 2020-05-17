@@ -146,9 +146,14 @@ def __crop(img, size, pos):
         return img.crop((x1, y1, min(ow, x1 + tw), min(oh, y1 + th)))
     return img
 
-def get_transform(opt, params, method=Image.BICUBIC, normalize=True, toTensor=True):
+def get_transform(opt, params, method=Image.NEAREST, normalize=True, toTensor=True):
     transform_list = []
-    if opt.scale != 0:
+    if opt.blur_ratio != 0 and opt.is_B:
+        osize = [opt.image_size[0] // pow(2, opt.blur_ratio), opt.image_size[1] // pow(2, opt.blur_ratio)]
+        transform_list.append(transforms.Resize(osize, method))
+        osize = [osize[0] * pow(2, opt.blur_ratio), osize[1] * pow(2, opt.blur_ratio)]
+        transform_list.append(transforms.Resize(osize, method))
+    elif opt.scale != 0:
         osize = [opt.image_size[0] // pow(2, opt.scale), opt.image_size[1] // pow(2, opt.scale)]
         transform_list.append(transforms.Resize(osize, method))
     elif 'resize' in opt.resize_or_crop:

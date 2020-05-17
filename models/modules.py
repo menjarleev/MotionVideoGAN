@@ -1,5 +1,6 @@
 import torch
 from torch import nn
+from collections import OrderedDict
 
 class Conv(nn.Module):
     def __init__(self, in_channel, out_channel, kernel_size=3, stride=1, padding='reflect', bias=False):
@@ -217,3 +218,331 @@ class ConvLSTMBAM(nn.Module):
     def detach_state(self):
         self.hidden_state = self.hidden_state.detach()
         self.cell_state = self.cell_state.detach()
+
+class BranchResBlock(nn.Module):
+    def __init__(self, n_channel, kernel_size=3, stride=1, padding='reflect', activation=nn.ReLU(True), norm_layer=nn.BatchNorm2d, ratio=4):
+        super(BranchResBlock, self).__init__()
+        self.n_channel = n_channel
+        self.conv = Conv(n_channel, 3 * n_channel, kernel_size=kernel_size, stride=stride, padding=padding)
+        self.bg = nn.Sequential(norm_layer(n_channel), activation, Conv(n_channel, n_channel, kernel_size=kernel_size, stride=stride, padding=padding))
+        self.fg = nn.Sequential(norm_layer(n_channel), activation, Conv(n_channel, n_channel, kernel_size=kernel_size, stride=stride, padding=padding))
+        self.mask  = nn.Sequential(norm_layer(n_channel), activation, Conv(n_channel, n_channel, kernel_size=kernel_size, stride=stride, padding=padding))
+        self.sigmoid = nn.Sigmoid()
+        self.channel_attention = ChannelAttention(n_channel)
+        self.spatial_attention = SpatialAttention()
+
+    def forward(self, input):
+        x = self.conv(input)
+        mask, bg, fg = torch.split(x, self.n_channel, dim=1)
+        mask = self.mask(mask)
+        mask = self.channel_attention(mask) * mask
+        mask = self.spatial_attention(mask) * mask
+        mask = self.sigmoid(mask)
+        x = bg * mask + (1 - mask) * fg
+        return x + input
+
+
+class AlignedConvLSTM(nn.Module):
+    def __init__(self, n_channel, kernel_size=3, stride=1, padding='reflect', activation=nn.ReLU(True), norm_layer=nn.BatchNorm2d, ratio=4):
+        super(AlignedConvLSTM, self).__init__()
+        self.n_channel = n_channel
+        self.align_hidden = Conv(n_channel * 2, n_channel, kernel_size=kernel_size,stride=stride, padding=padding)
+        self.align_cell = Conv(n_channel * 2, n_channel, kernel_size=kernel_size,stride=stride, padding=padding)
+        self.compression = Conv(n_channel * 2, n_channel * 4, kernel_size=kernel_size, stride=stride, padding=padding)
+        # self.i_op = nn.Sequential(nn.ReLU(True), Conv(n_channel, n_channel // ratio, kernel_size=kernel_size, stride=stride, padding=padding),
+        #                           nn.ReLU(True), Conv(n_channel // ratio, n_channel, kernel_size=kernel_size, stride=stride, padding=padding))
+        # self.f_op = nn.Sequential(nn.ReLU(True), Conv(n_channel, n_channel // ratio, kernel_size=kernel_size, stride=stride, padding=padding),
+        #                           nn.ReLU(True), Conv(n_channel // ratio, n_channel, kernel_size=kernel_size, stride=stride, padding=padding))
+        # self.o_op = nn.Sequential(nn.ReLU(True), Conv(n_channel, n_channel // ratio, kernel_size=kernel_size, stride=stride, padding=padding),
+        #                           nn.ReLU(True), Conv(n_channel // ratio, n_channel, kernel_size=kernel_size, stride=stride, padding=padding))
+        # self.g_op = nn.Sequential(nn.ReLU(True), Conv(n_channel, n_channel // ratio, kernel_size=kernel_size, stride=stride, padding=padding),
+        #                           nn.ReLU(True), Conv(n_channel // ratio, n_channel, kernel_size=kernel_size, stride=stride, padding=padding))
+        self.out = nn.Sequential(Conv(n_channel, n_channel, kernel_size=kernel_size, stride=stride, padding=padding),
+                                 norm_layer(n_channel), activation)
+        self.cell_state = None
+        self.hidden_state = None
+
+    def forward(self, original_input):
+        pre_hidden = torch.cat([original_input, self.hidden_state], 1)
+        pre_cell = torch.cat([original_input, self.cell_state], 1)
+        hidden_in = self.align_hidden(pre_hidden)
+        cell_in = self.align_cell(pre_cell)
+        combined_input = torch.cat([hidden_in, original_input], 1)
+        combined_conv = self.compression(combined_input)
+        cc_i, cc_f, cc_o, cc_g = torch.split(combined_conv, self.n_channel, dim=1)
+        # cc_i = self.i_op(cc_i)
+        # cc_f = self.i_op(cc_f)
+        # cc_o = self.i_op(cc_o)
+        # cc_g = self.i_op(cc_g)
+        i = torch.sigmoid(cc_i)
+        f = torch.sigmoid(cc_f)
+        o = torch.sigmoid(cc_o)
+        g = torch.tanh(cc_g)
+        self.cell_state = f * cell_in + i * g
+        self.hidden_state = o * torch.tanh(self.cell_state)
+        # activation
+        x = self.out(self.hidden_state)
+        out = original_input + x
+        return out
+
+    def init_state(self, feature_size, batch_size=1, gpu_id=0):
+        self.hidden_state = torch.zeros(batch_size, self.n_channel, feature_size[0], feature_size[1]).cuda(gpu_id)
+        self.cell_state = torch.zeros(batch_size, self.n_channel, feature_size[0], feature_size[1]).cuda(gpu_id)
+        return [self.hidden_state, self.cell_state]
+
+    def detach_state(self):
+        self.hidden_state = self.hidden_state.detach()
+        self.cell_state = self.cell_state.detach()
+
+#################### openpose ####################
+##################################################
+def make_layers(block, no_relu_layers):
+    layers = []
+    for layer_name, v in block.items():
+        if 'pool' in layer_name:
+            layer = nn.MaxPool2d(kernel_size=v[0], stride=v[1],
+                                    padding=v[2])
+            layers.append((layer_name, layer))
+        else:
+            conv2d = nn.Conv2d(in_channels=v[0], out_channels=v[1],
+                               kernel_size=v[2], stride=v[3],
+                               padding=v[4])
+            layers.append((layer_name, conv2d))
+            if layer_name not in no_relu_layers:
+                layers.append(('relu_'+layer_name, nn.ReLU(inplace=True)))
+
+    return nn.Sequential(OrderedDict(layers))
+
+class bodypose_model(nn.Module):
+    def __init__(self):
+        super(bodypose_model, self).__init__()
+
+        # these layers have no relu layer
+        no_relu_layers = ['conv5_5_CPM_L1', 'conv5_5_CPM_L2', 'Mconv7_stage2_L1',\
+                          'Mconv7_stage2_L2', 'Mconv7_stage3_L1', 'Mconv7_stage3_L2',\
+                          'Mconv7_stage4_L1', 'Mconv7_stage4_L2', 'Mconv7_stage5_L1',\
+                          'Mconv7_stage5_L2', 'Mconv7_stage6_L1', 'Mconv7_stage6_L1']
+        blocks = {}
+        block0 = OrderedDict([
+                      ('conv1_1', [3, 64, 3, 1, 1]),
+                      ('conv1_2', [64, 64, 3, 1, 1]),
+                      ('pool1_stage1', [2, 2, 0]),
+                      ('conv2_1', [64, 128, 3, 1, 1]),
+                      ('conv2_2', [128, 128, 3, 1, 1]),
+                      ('pool2_stage1', [2, 2, 0]),
+                      ('conv3_1', [128, 256, 3, 1, 1]),
+                      ('conv3_2', [256, 256, 3, 1, 1]),
+                      ('conv3_3', [256, 256, 3, 1, 1]),
+                      ('conv3_4', [256, 256, 3, 1, 1]),
+                      ('pool3_stage1', [2, 2, 0]),
+                      ('conv4_1', [256, 512, 3, 1, 1]),
+                      ('conv4_2', [512, 512, 3, 1, 1]),
+                      ('conv4_3_CPM', [512, 256, 3, 1, 1]),
+                      ('conv4_4_CPM', [256, 128, 3, 1, 1])
+                  ])
+
+
+        # Stage 1
+        block1_1 = OrderedDict([
+                        ('conv5_1_CPM_L1', [128, 128, 3, 1, 1]),
+                        ('conv5_2_CPM_L1', [128, 128, 3, 1, 1]),
+                        ('conv5_3_CPM_L1', [128, 128, 3, 1, 1]),
+                        ('conv5_4_CPM_L1', [128, 512, 1, 1, 0]),
+                        ('conv5_5_CPM_L1', [512, 38, 1, 1, 0])
+                    ])
+
+        block1_2 = OrderedDict([
+                        ('conv5_1_CPM_L2', [128, 128, 3, 1, 1]),
+                        ('conv5_2_CPM_L2', [128, 128, 3, 1, 1]),
+                        ('conv5_3_CPM_L2', [128, 128, 3, 1, 1]),
+                        ('conv5_4_CPM_L2', [128, 512, 1, 1, 0]),
+                        ('conv5_5_CPM_L2', [512, 19, 1, 1, 0])
+                    ])
+        blocks['block1_1'] = block1_1
+        blocks['block1_2'] = block1_2
+
+        self.model0 = make_layers(block0, no_relu_layers)
+
+        # Stages 2 - 6
+        for i in range(2, 7):
+            blocks['block%d_1' % i] = OrderedDict([
+                    ('Mconv1_stage%d_L1' % i, [185, 128, 7, 1, 3]),
+                    ('Mconv2_stage%d_L1' % i, [128, 128, 7, 1, 3]),
+                    ('Mconv3_stage%d_L1' % i, [128, 128, 7, 1, 3]),
+                    ('Mconv4_stage%d_L1' % i, [128, 128, 7, 1, 3]),
+                    ('Mconv5_stage%d_L1' % i, [128, 128, 7, 1, 3]),
+                    ('Mconv6_stage%d_L1' % i, [128, 128, 1, 1, 0]),
+                    ('Mconv7_stage%d_L1' % i, [128, 38, 1, 1, 0])
+                ])
+
+            blocks['block%d_2' % i] = OrderedDict([
+                    ('Mconv1_stage%d_L2' % i, [185, 128, 7, 1, 3]),
+                    ('Mconv2_stage%d_L2' % i, [128, 128, 7, 1, 3]),
+                    ('Mconv3_stage%d_L2' % i, [128, 128, 7, 1, 3]),
+                    ('Mconv4_stage%d_L2' % i, [128, 128, 7, 1, 3]),
+                    ('Mconv5_stage%d_L2' % i, [128, 128, 7, 1, 3]),
+                    ('Mconv6_stage%d_L2' % i, [128, 128, 1, 1, 0]),
+                    ('Mconv7_stage%d_L2' % i, [128, 19, 1, 1, 0])
+                ])
+
+        for k in blocks.keys():
+            blocks[k] = make_layers(blocks[k], no_relu_layers)
+
+        self.model1_1 = blocks['block1_1']
+        self.model2_1 = blocks['block2_1']
+        self.model3_1 = blocks['block3_1']
+        self.model4_1 = blocks['block4_1']
+        self.model5_1 = blocks['block5_1']
+        self.model6_1 = blocks['block6_1']
+
+        self.model1_2 = blocks['block1_2']
+        self.model2_2 = blocks['block2_2']
+        self.model3_2 = blocks['block3_2']
+        self.model4_2 = blocks['block4_2']
+        self.model5_2 = blocks['block5_2']
+        self.model6_2 = blocks['block6_2']
+
+
+    def forward(self, x):
+        out_list = []
+        out1 = self.model0(x)
+
+        out1_1 = self.model1_1(out1)
+        out1_2 = self.model1_2(out1)
+        out2 = torch.cat([out1_1, out1_2, out1], 1)
+        out_list += [out2]
+
+        out2_1 = self.model2_1(out2)
+        out2_2 = self.model2_2(out2)
+        out3 = torch.cat([out2_1, out2_2, out1], 1)
+        out_list += [out3]
+
+        out3_1 = self.model3_1(out3)
+        out3_2 = self.model3_2(out3)
+        out4 = torch.cat([out3_1, out3_2, out1], 1)
+        out_list += [out4]
+
+        out4_1 = self.model4_1(out4)
+        out4_2 = self.model4_2(out4)
+        out5 = torch.cat([out4_1, out4_2, out1], 1)
+        out_list += [out5]
+
+        out5_1 = self.model5_1(out5)
+        out5_2 = self.model5_2(out5)
+        out6 = torch.cat([out5_1, out5_2, out1], 1)
+        out_list += [out6]
+
+        out6_1 = self.model6_1(out6)
+        out6_2 = self.model6_2(out6)
+        out_list += [out6_1]
+        out_list += [out6_2]
+
+        return out_list
+
+class handpose_model(nn.Module):
+    def __init__(self):
+        super(handpose_model, self).__init__()
+
+        # these layers have no relu layer
+        no_relu_layers = ['conv6_2_CPM', 'Mconv7_stage2', 'Mconv7_stage3',\
+                          'Mconv7_stage4', 'Mconv7_stage5', 'Mconv7_stage6']
+        # stage 1
+        block1_0 = OrderedDict([
+                ('conv1_1', [3, 64, 3, 1, 1]),
+                ('conv1_2', [64, 64, 3, 1, 1]),
+                ('pool1_stage1', [2, 2, 0]),
+                ('conv2_1', [64, 128, 3, 1, 1]),
+                ('conv2_2', [128, 128, 3, 1, 1]),
+                ('pool2_stage1', [2, 2, 0]),
+                ('conv3_1', [128, 256, 3, 1, 1]),
+                ('conv3_2', [256, 256, 3, 1, 1]),
+                ('conv3_3', [256, 256, 3, 1, 1]),
+                ('conv3_4', [256, 256, 3, 1, 1]),
+                ('pool3_stage1', [2, 2, 0]),
+                ('conv4_1', [256, 512, 3, 1, 1]),
+                ('conv4_2', [512, 512, 3, 1, 1]),
+                ('conv4_3', [512, 512, 3, 1, 1]),
+                ('conv4_4', [512, 512, 3, 1, 1]),
+                ('conv5_1', [512, 512, 3, 1, 1]),
+                ('conv5_2', [512, 512, 3, 1, 1]),
+                ('conv5_3_CPM', [512, 128, 3, 1, 1])
+            ])
+
+        block1_1 = OrderedDict([
+            ('conv6_1_CPM', [128, 512, 1, 1, 0]),
+            ('conv6_2_CPM', [512, 22, 1, 1, 0])
+        ])
+
+        blocks = {}
+        blocks['block1_0'] = block1_0
+        blocks['block1_1'] = block1_1
+
+        # stage 2-6
+        for i in range(2, 7):
+            blocks['block%d' % i] = OrderedDict([
+                    ('Mconv1_stage%d' % i, [150, 128, 7, 1, 3]),
+                    ('Mconv2_stage%d' % i, [128, 128, 7, 1, 3]),
+                    ('Mconv3_stage%d' % i, [128, 128, 7, 1, 3]),
+                    ('Mconv4_stage%d' % i, [128, 128, 7, 1, 3]),
+                    ('Mconv5_stage%d' % i, [128, 128, 7, 1, 3]),
+                    ('Mconv6_stage%d' % i, [128, 128, 1, 1, 0]),
+                    ('Mconv7_stage%d' % i, [128, 22, 1, 1, 0])
+                ])
+
+        for k in blocks.keys():
+            blocks[k] = make_layers(blocks[k], no_relu_layers)
+
+        self.model1_0 = blocks['block1_0']
+        self.model1_1 = blocks['block1_1']
+        self.model2 = blocks['block2']
+        self.model3 = blocks['block3']
+        self.model4 = blocks['block4']
+        self.model5 = blocks['block5']
+        self.model6 = blocks['block6']
+
+    def forward(self, x):
+        out1_0 = self.model1_0(x)
+        out1_1 = self.model1_1(out1_0)
+        concat_stage2 = torch.cat([out1_1, out1_0], 1)
+        out_stage2 = self.model2(concat_stage2)
+        concat_stage3 = torch.cat([out_stage2, out1_0], 1)
+        out_stage3 = self.model3(concat_stage3)
+        concat_stage4 = torch.cat([out_stage3, out1_0], 1)
+        out_stage4 = self.model4(concat_stage4)
+        concat_stage5 = torch.cat([out_stage4, out1_0], 1)
+        out_stage5 = self.model5(concat_stage5)
+        concat_stage6 = torch.cat([out_stage5, out1_0], 1)
+        out_stage6 = self.model6(concat_stage6)
+        return out_stage6
+
+class ScaleDown(nn.Module):
+    def __init__(self, in_channel, out_channel, kernel_size=3, stride=1, bias=False):
+        super(ScaleDown, self).__init__()
+        self.bottleneck = Conv(in_channel, out_channel, kernel_size=kernel_size, stride=stride, bias=bias)
+        self.downsampler = nn.AvgPool2d(kernel_size=2, stride=2, count_include_pad=False)
+        self.upsampler = nn.Upsample(scale_factor=2)
+        self.conv = Conv(out_channel * 2, out_channel, kernel_size=3, stride=1, bias=bias)
+
+    def forward(self, x):
+        x_1 = x
+        x_2 = self.downsampler(x_1)
+        x_3 = self.downsampler(x_2)
+        x_1 = self.bottleneck(x_1)
+        x_2 = self.bottleneck(x_2)
+        x_3 = self.bottleneck(x_3)
+        x_1 = self.downsampler(x_1)
+        x_3 = self.upsampler(x_3)
+        mean_feat = (x_1 + x_2 + x_3) / 3
+        max_feat = torch.max(torch.max(x_1, x_2), x_3)
+        feat = torch.cat([mean_feat, max_feat], dim=1)
+        out = self.conv(feat)
+        return out
+
+class ScaleUp(nn.Module):
+    def __init__(self, in_channel, out_channel, kernel_size=3, stride=1, bias=False):
+        self.upsampler = nn.UPsample()
+
+
+
+
+

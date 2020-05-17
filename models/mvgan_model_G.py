@@ -3,7 +3,8 @@ import torch
 import torch.nn as nn
 from util import util
 from .models import define_G
-
+scale_net = ['VAE', 'recursive', 'video', 'image']
+weight_net = ['stage2']
 class mvganG_vid(BaseModel):
 
     def name(self):
@@ -12,10 +13,10 @@ class mvganG_vid(BaseModel):
     def initialize(self, opt):
         BaseModel.initialize(self, opt)
         self.isTrain = opt.isTrain
-        if not opt.debug:
-            # enables benchmark mode (auto-tuner to find best algorithm)
-            # the input size should not change at all
-            torch.backends.cudnn.benchmark = True
+        # if not opt.debug:
+        #     # enables benchmark mode (auto-tuner to find best algorithm)
+        #     # the input size should not change at all
+        #     torch.backends.cudnn.benchmark = True
 
         self.netG = define_G(opt, opt.net_type)
         self.net_type = self.opt.net_type
@@ -80,9 +81,18 @@ class mvganG_vid(BaseModel):
         for t in range(n_frames_per_load):
             _, _, _, h, w = real_A.size()
             input_Ai = real_A[:, t:t+tG, ...].view(self.bs, -1, h, w)
-            fake_B = self.netG(input_Ai, self.scale, self.old_w).unsqueeze(1)
-            if self.scale == 0 and (t + 1) % self.n_frames_bp == 0:
-                self.netG.detach_state()
+            if self.net_type in scale_net:
+                fake_B = self.netG(input_Ai, self.scale, self.old_w).unsqueeze(1)
+                if self.scale == 0 and (t + 1) % self.n_frames_bp == 0:
+                    self.netG.detach_state()
+            elif self.net_type in weight_net:
+                fake_B = self.netG(input_Ai, self.old_w).unsqueeze(1)
+                if (t + 1) % self.n_frames_bp == 0:
+                    self.netG.detach_state()
+            else:
+                fake_B = self.netG(input_Ai).unsqueeze(1)
+                if (t + 1) % self.n_frames_bp == 0:
+                    self.netG.detach_state()
             fake_Bs = fake_B if fake_Bs is None else torch.cat([fake_Bs, fake_B], dim=1)
         return fake_Bs
 
@@ -122,11 +132,12 @@ class mvganG_img(BaseModel):
     def initialize(self, opt):
         BaseModel.initialize(self, opt)
         self.isTrain = opt.isTrain
-        if not opt.debug:
-            # enables benchmark mode (auto-tuner to find best algorithm)
-            # the input size should not change at all
-            torch.backends.cudnn.benchmark = True
+        # if not opt.debug:
+        #     # enables benchmark mode (auto-tuner to find best algorithm)
+        #     # the input size should not change at all
+        #     torch.backends.cudnn.benchmark = True
         self.netG = define_G(opt, which_net=opt.net_type)
+        self.net_type = opt.net_type
         self.scale = opt.scale
         self.split_gpus = (self.opt.n_gpus_gen < len(self.opt.gpu_ids)) and (self.opt.batch_size == 1)
         self.gpus_gen = self.opt.gpu_ids[:self.opt.n_gpus_gen]
@@ -160,7 +171,10 @@ class mvganG_img(BaseModel):
 
     def forward(self, input_A, input_B, dummy_bs=0):
         real_A, real_B= self.encode_input(input_A, input_B)
-        fake_B = self.netG(real_A, scale=self.scale, w=self.old_w)
+        if self.net_type in weight_net:
+            fake_B = self.netG(real_A, scale=self.scale, w=self.old_w)
+        else:
+            fake_B = self.netG(real_A)
         return real_A, real_B, fake_B
 
     def inference(self, input_A, input_B):
