@@ -1,7 +1,7 @@
 import os
 import torch
 from options.train_options import TrainOptions
-from models.models import create_model, create_optimizer, init_params, save_models, update_models, init_model_state, update_weights, detach_model_state
+from models.models import create_model, create_optimizer, init_params, save_models, update_models, init_model_state, update_weights, detach_model_state, update_phi
 from data.data_loader import CreateDataLoader
 from models.generator import img_net, vid_net
 from subprocess import call
@@ -47,6 +47,7 @@ def train():
                 loss_G, loss_D, loss_D_T = modelD.module.get_losses(loss_dict, None)
                 backward(opt, loss_G, loss_D, loss_D_T, optimizer_G, optimizer_D, optimizer_D_T)
                 update_weights(opt, total_steps, dataset_size, modelG, modelD)
+                update_phi(opt, total_steps, dataset_size, modelG, modelD)
 
             elif opt.model == 'mvgan_vid':
                 n_frames_total, n_frames_load, t_len = data_loader.dataset.init_data_params(data, n_gpus, tG)

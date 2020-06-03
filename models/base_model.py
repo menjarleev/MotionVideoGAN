@@ -134,6 +134,20 @@ class BaseModel(t.nn.Module):
             self.old_w = 1
             return self.old_w, self.old_w
 
+    def update_phi(self, total_steps, step_length):
+        if not self.isTrain:
+            self.old_phi = 1
+            return self.old_phi, self.old_phi
+        elif total_steps <= self.opt.niter_phi_update * step_length:
+            phi = total_steps / (self.opt.niter_phi_update * step_length)
+            old_phi = self.old_phi
+            new_phi = phi
+            self.old_phi = phi
+            return old_phi, new_phi
+        else:
+            self.old_phi = 1
+            return self.old_phi, self.old_phi
+
     def update_scale(self, scale):
         print('update scale: %f -> %f' % (self.scale, scale))
         self.scale = scale

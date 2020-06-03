@@ -15,3 +15,4 @@ demo_camera.py
 
 *.sh
 **/scropt/
+**/models/

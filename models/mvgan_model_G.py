@@ -36,6 +36,7 @@ class mvganG_vid(BaseModel):
 
         if self.isTrain:
             self.old_lr = opt.lr
+            self.old_phi = 1
             self.old_w = 1
 
             #initialize optimizer G
@@ -152,6 +153,7 @@ class mvganG_img(BaseModel):
 
         if self.isTrain:
             self.old_lr = opt.lr
+            self.old_phi = 1
             self.old_w = 1
 
             #initialize optimizer G
@@ -169,12 +171,12 @@ class mvganG_img(BaseModel):
         real_image = real_image.cuda(self.gpus_gen[0])
         return input_map, real_image
 
-    def forward(self, input_A, input_B, dummy_bs=0):
+    def forward(self, input_A, input_B):
         real_A, real_B= self.encode_input(input_A, input_B)
         if self.net_type in weight_net:
-            fake_B = self.netG(real_A, scale=self.scale, w=self.old_w)
-        else:
-            fake_B = self.netG(real_A)
+            fake_B = self.netG(real_A, self.scale, self.old_w)
+        if self.net_type == 'stage1':
+            fake_B = self.netG(real_A, self.old_phi)
         return real_A, real_B, fake_B
 
     def inference(self, input_A, input_B):

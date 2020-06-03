@@ -10,7 +10,7 @@ import functools
 def weights_init(model):
     classname = model.__class__.__name__
     if classname.find('Conv') != -1 and hasattr(model, 'weight'):
-        model.weight.data.normal_(0.0, 0.02)
+        model.weight.data.normal_(0, 0.02)
     elif classname.find('BatchNorm2d') != -1:
         model.weight.data.normal_(1.0, 0.02)
         model.bias.data.fill_(0)
@@ -20,6 +20,8 @@ def get_norm_layer(norm_type='instance'):
         norm_layer = functools.partial(nn.BatchNorm2d, affine=True)
     elif norm_type == 'instance':
         norm_layer = functools.partial(nn.InstanceNorm2d, affine=False)
+    elif norm_type == 'None':
+        norm_layer = None
     else:
         raise NotImplementedError('normalization layer [%s] is not found' % norm_type)
     return norm_layer

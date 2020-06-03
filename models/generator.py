@@ -46,7 +46,6 @@ class VideoGenerator(t.nn.Module):
         ngf_list += [ngf_list[-1]]
         res_blocks = []
         for i in range(n_res_block):
-            # res_blocks += [ResnetBlock(ngf_list[-1], norm_layer)]
             res_blocks += [RCBAM(ngf_list[-1], ngf_list[-1], norm_layer)]
         self.res_blocks = nn.Sequential(*res_blocks)
 
@@ -513,48 +512,50 @@ class StageOneGenerator(nn.Module):
         ngf_list = [ngf]
         n_res_block = opt.n_res_block
         max_channel = opt.max_channel
+        actv = nn.ReLU(True)
 
         self.n_downsampling = opt.n_downsampling
         # set up encoder
-        downsample = [Conv(input_dim, ngf_list[-1], kernel_size=3, stride=1, padding=padding),
-                      norm_layer(ngf_list[-1]), nn.ReLU(True)]
+        preprocess = [Conv(input_dim, pref, kernel_size=7, stride=1, padding=padding),
+                      norm_layer(ngf_list[-1]), actv]
+        self.preprocess = nn.Sequential(*preprocess)
+        downsample = [Conv(pref, ngf_list[-1], kernel_size=3, stride=1, padding=padding),
+                      norm_layer(ngf_list[-1]), actv]
         ngf_list += [min(ngf_list[-1] * 2, max_channel)]
         for i in range(self.n_downsampling):
             downsample += [Conv(ngf_list[-2], ngf_list[-1], kernel_size=3, stride=2, padding=padding),
-                           norm_layer(ngf_list[-1]), nn.ReLU(True)]
+                           norm_layer(ngf_list[-1]), actv]
             if i != self.n_downsampling - 1:
                 ngf_list += [min(ngf_list[-1] * 2, max_channel)]
         self.downsample = nn.Sequential(*downsample)
         stage1 = []
-        for i in range(n_res_block // 2):
+        hi, wi = [x // (2 ** self.n_downsampling) for x in opt.image_size]
+        for i in range(opt.stage_one_block):
             # stage1 += [ResnetBlock(ngf_list[-1], norm_layer, padding_type=padding)]
-            stage1 += [RCBAM(ngf_list[-1], ngf_list[-1], norm_layer, padding=padding)]
+            # stage1 += [AdaptiveRCBAM(ngf_list[-1], hi, wi, norm_layer=norm_layer, activation=actv)]
+            stage1 += [FusionResACM(ngf_list[-1], hi, wi, norm_layer=norm_layer, activation=actv)]
         self.stage1 = nn.Sequential(*stage1)
         upsample = []
         for i in range(0, self.n_downsampling):
-            # upsampler += [nn.ConvTranspose2d(ngf_list[i - 1], ngf_list[i - 2], kernel_size=3, stride=2, padding=1, output_padding=1), norm_layer(ngf_list[i - 2]), nn.ReLU(True)]
             upsample += [nn.Upsample(scale_factor=2, mode='nearest'),
                          Conv(ngf_list[-1 - i], ngf_list[-2 - i], kernel_size=3, stride=1, padding=padding),
-                         norm_layer(ngf_list[-2 - i]), nn.ReLU(True)]
+                         norm_layer(ngf_list[-2 - i]), actv]
+            # upsample += [nn.ConvTranspose2d(ngf_list[-i - 1], ngf_list[-i - 2], kernel_size=3, stride=2, padding=1, output_padding=1),
+            #             norm_layer(ngf_list[-i - 2]), actv]
         upsample += [Conv(ngf_list[0], pref, kernel_size=3, stride=1, padding=padding), norm_layer(pref),
-                     nn.ReLU(True)]
-        self.out = nn.Sequential(Conv(pref, output_dim, kernel_size=3, stride=1, padding=padding), nn.Tanh())
+                     actv]
+        self.out = nn.Sequential(Conv(pref, output_dim, kernel_size=7, stride=1, padding=padding), nn.Tanh())
         self.upsample = nn.Sequential(*upsample)
         self.feature_size = opt.image_size
 
-    def forward(self, input):
-        x = self.downsample(input)
-        x = self.stage1(x)
+    def forward(self, feat, phi):
+        x = self.preprocess(feat)
+        x = self.downsample(x)
+        for module in self.stage1:
+            x = module(x, phi)
         x = self.upsample(x)
         x = self.out(x)
         return x
-
-    # def init_state(self, batch_size, gpu_id):
-    #     self.state = [self.upsample[-3].init_state(self.feature_size, batch_size, gpu_id)]
-    #     return self.state
-    #
-    # def detach_state(self):
-    #     self.upsample[-3].detach_state()
 
 
 class StageTwoGenerator(nn.Module):
@@ -567,61 +568,60 @@ class StageTwoGenerator(nn.Module):
         output_dim = opt.output_dim
         padding = opt.padding_type
         ngf_list = [ngf]
-        n_res_block = opt.n_res_block
         max_channel = opt.max_channel
-
+        actv = nn.ReLU(True)
         self.n_downsampling = opt.n_downsampling
         # set up encoder
-        downsample = [Conv(input_dim, ngf_list[-1], kernel_size=3, stride=1, padding=padding), norm_layer(ngf_list[-1]), nn.ReLU(True)]
+        preprocess = [Conv(input_dim, pref, kernel_size=7, stride=1, padding=padding),
+                      norm_layer(ngf_list[-1]), actv]
+        self.convlstm1 = AlignedConvLSTM(pref, kernel_size=3, stride=1, padding=padding, norm_layer=norm_layer)
+        self.preprocess = nn.Sequential(*preprocess)
+        downsample = [Conv(pref, ngf_list[-1], kernel_size=3, stride=1, padding=padding),
+                      norm_layer(ngf_list[-1]), actv]
         ngf_list += [min(ngf_list[-1] * 2, max_channel)]
         for i in range(self.n_downsampling):
             downsample += [Conv(ngf_list[-2], ngf_list[-1], kernel_size=3, stride=2, padding=padding),
-                           norm_layer(ngf_list[-1]), nn.ReLU(True)]
+                           norm_layer(ngf_list[-1]), actv]
             if i != self.n_downsampling - 1:
                 ngf_list += [min(ngf_list[-1] * 2, max_channel)]
         self.downsample = nn.Sequential(*downsample)
         stage1 = []
-        stage2 = []
-        for i in range(n_res_block // 2):
-            stage1 += [RCBAM(ngf_list[-1], ngf_list[-1], norm_layer, padding=padding)]
+        hi, wi = [x // (2 ** self.n_downsampling) for x in opt.image_size]
+        for i in range(opt.stage_one_block):
             # stage1 += [ResnetBlock(ngf_list[-1], norm_layer, padding_type=padding)]
-
-        for i in range(n_res_block):
-            stage2 += [RCBAM(ngf_list[-1], ngf_list[-1], norm_layer, padding=padding)]
-            # stage2 += [ResnetBlock(ngf_list[-1], norm_layer, padding_type=padding)]
+            # stage1 += [AdaptiveRCBAM(ngf_list[-1], hi, wi, norm_layer=norm_layer, activation=actv, fusion=False)]
+            stage1 += [FusionResACM(ngf_list[-1], hi, wi, norm_layer=norm_layer, activation=actv, fusion=False)]
         self.stage1 = nn.Sequential(*stage1)
-        self.stage2 = nn.Sequential(*stage2)
         upsample = []
         for i in range(0, self.n_downsampling):
-            # upsampler += [nn.ConvTranspose2d(ngf_list[i - 1], ngf_list[i - 2], kernel_size=3, stride=2, padding=1, output_padding=1), norm_layer(ngf_list[i - 2]), nn.ReLU(True)]
             upsample += [nn.Upsample(scale_factor=2, mode='nearest'),
-                         Conv(ngf_list[-1 - i], ngf_list[-2 - i], kernel_size=3, stride=1, padding=padding), norm_layer(ngf_list[-2 - i]), nn.ReLU(True)]
+                         Conv(ngf_list[-1 - i], ngf_list[-2 - i], kernel_size=3, stride=1, padding=padding),
+                         norm_layer(ngf_list[-2 - i]), actv]
+            # upsample += [nn.ConvTranspose2d(ngf_list[-i - 1], ngf_list[-i - 2], kernel_size=3, stride=2, padding=1, output_padding=1),
+            #             norm_layer(ngf_list[-i - 2]), actv]
         upsample += [Conv(ngf_list[0], pref, kernel_size=3, stride=1, padding=padding), norm_layer(pref),
-                     nn.ReLU(True)]
-        self.convlstm = AlignedConvLSTM(pref, kernel_size=3, stride=1, padding=padding, norm_layer=norm_layer)
-        self.out = nn.Sequential(Conv(pref, output_dim, kernel_size=3, stride=1, padding=padding), nn.Tanh())
+                     actv]
+
+        self.convlstm2 = AlignedConvLSTM(pref, kernel_size=3, stride=1, padding=padding, norm_layer=norm_layer)
+        self.out = nn.Sequential(Conv(pref, output_dim, kernel_size=7, stride=1, padding=padding), nn.Tanh())
         self.upsample = nn.Sequential(*upsample)
         self.feature_size = opt.image_size
-        self.downsample.eval()
-        self.stage1.eval()
 
-    def forward(self, input, w=1):
-        x = self.downsample(input)
+    def forward(self, feat, w=1):
+        x = self.preprocess(feat)
+        x = (1 - w) * x + w * self.convlstm1(x)
+        x = self.downsample(x)
         x = self.stage1(x)
-        y = self.stage2(x)
-        x = x + y
         x = self.upsample(x)
-        if w != 1:
-            x = (1 - w) * x + w * self.convlstm(x)
-        else:
-            x = self.convlstm(x)
+        x = (1 - w) * x + w * self.convlstm2(x)
         x = self.out(x)
         return x
 
-
     def init_state(self, batch_size, gpu_id):
-        self.state = self.convlstm.init_state(self.feature_size, batch_size, gpu_id)
-        return self.state
+        self.state1 = self.convlstm1.init_state(self.feature_size, batch_size, gpu_id)
+        self.state2 = self.convlstm2.init_state(self.feature_size, batch_size, gpu_id)
+        return self.state1
 
     def detach_state(self):
-        self.convlstm.detach_state()
+        self.convlstm1.detach_state()
+        self.convlstm2.detach_state()

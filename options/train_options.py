@@ -24,6 +24,7 @@ class TrainOptions(BaseOptions):
         self.parser.add_argument('--next_scale', type=bool, default=True, help='is opt.scale next scale or current scale')
         self.parser.add_argument('--continue_train', action='store_true', help='whether continue to train model with current scale')
         self.parser.add_argument('--niter_weight_update', type=int, default=5, help='how many epochs to spend to upscale image gradually')
+        self.parser.add_argument('--niter_phi_update', type=int, default=5, help='how many epochs to replace average/max pool with conv')
         self.parser.add_argument('--openpose_path', type=str, default='./models/pretrained_model/body_pose_model.pth', help='the path for pytorch implemented openpose state_dict')
 
         # loss term

@@ -14,12 +14,13 @@ class BaseOptions():
         self.parser.add_argument('--load_size', type=int, default=512, help='scale images to this size')
         self.parser.add_argument('--fine_size', type=int, default=512, help='lower bound of resolution for input image')
         self.parser.add_argument('--resize_or_crop', type=str, default='', help='crop or resize dataset')
+        self.parser.add_argument('--norm_G', type=str, default='spectralinstance', help='instance normalization or batch normalization')
 
         # model structure
         self.parser.add_argument('--n_scale', type=int, default=3, help='number of encoder & decoder in the model')
         self.parser.add_argument('--n_downsampling', type=int, default=4, help='number of downsample after n_scale in the model')
         self.parser.add_argument('--padding_type', type=str, default='reflect', help='padding type, select from [reflect, replicate, zero]')
-        self.parser.add_argument('--norm_layer', type=str, default='batch', help='the norm layer of model, choose from [batch, instance]')
+        self.parser.add_argument('--norm_layer', type=str, default='instance', help='the norm layer of model, choose from [batch, instance, None]')
         self.parser.add_argument('--upsampler', type=str, default='bicubic', help='the upsampler for decoder, choose from [nearest, linear, bilinear, bicubic]')
 
         # generator
@@ -28,9 +29,11 @@ class BaseOptions():
         self.parser.add_argument('--n_res_block', type=int, default=8, help='number of ResBlock in the network')
         self.parser.add_argument('--n_mask_block', type=int, default=4, help='number of ResBlock in mask branch')
         self.parser.add_argument('--n_recursive_block', type=int, default=4, help='number of Rconv in the network')
+        self.parser.add_argument('--stage_one_block', type=int, default=9, help='number of ResBlock in the network')
+        self.parser.add_argument('--stage_two_block', type=int, default=3, help='number of ResBlock in the network')
 
         # discriminator
-        self.parser.add_argument('--ndf', type=int, default=32, help='number of initial discriminator kernel')
+        self.parser.add_argument('--ndf', type=int, default=64, help='number of initial discriminator kernel')
         self.parser.add_argument('--negative_slope', type=float, default=0.2, help='the negative slope value for LeakyReLU')
 
         # input & output info
